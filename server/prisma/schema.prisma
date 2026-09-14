@@ -1,0 +1,96 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String     @id @default(uuid())
+  email     String     @unique
+  name      String
+  avatarUrl String?
+  role      String     @default("VIEWER") // "TWO_C_TEAM" | "FA_TEAM" | "ADMIN" | "VIEWER"
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  auditLogs AuditLog[]
+}
+
+model WhitelistConfig {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  role      String   // "TWO_C_TEAM" | "FA_TEAM" | "ADMIN" | "VIEWER"
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CaseRecord {
+  id                  String       @id @default(uuid())
+  uid                 String       // 客戶唯一識別碼 (UID)
+  name                String       // 客戶姓名 (Name)
+  email               String?      // 客戶 Email
+  phone               String?      // 客戶電話
+  businessUnit        String       // "VALET" | "PEPPER"
+  
+  // 報表匯入動態數值
+  outstandingAmount   Float        // 當前欠款金額 ($總額)
+  outstandingDays     Int          // 逾期天數 (Outstanding Days)
+  billDate            DateTime?    // 帳單/應繳日
+  
+  // 階段狀態
+  stage               String       @default("UNREACHED") // "UNREACHED" | "STAGE_1" | "STAGE_2" | "STAGE_3" | "STAGE_4" | "CLOSED"
+  isClosed            Boolean      @default(false)
+  closedDate          DateTime?    // 結案日期
+  
+  // 2C Team 催帳欄位
+  collectionStartDate DateTime?    // 催帳開始日（首次通知日，用以歸納統計月份）
+  lineNoticeDate      DateTime?    // Line 通知日
+  lineStatus          String?      // Line 狀態 (已讀/未讀/已回覆/承諾繳款...)
+  emailNoticeDate     DateTime?    // Email 通知日
+  emailStatus         String?      // Email 狀態
+  phoneNoticeDate     DateTime?    // 電話通知日
+  phoneStatus         String?      // 電話狀態 (已接聽/未接/通話中...)
+  twoCNotes           String?      // 2C 備註
+  
+  // FA Team 催告與終止欄位
+  demandNoticeDate    DateTime?    // 催告日期
+  demandDueDate       DateTime?    // 催告到期日
+  demandDocUrl        String?      // 催告 Google 雲端文件連結
+  terminationNoticeDate DateTime?  // 終止函發送日期
+  terminationDocUrl   String?      // 終止函 Google 雲端文件連結
+  faNotes             String?      // FA 備註
+  
+  // 歷史與批次更新追蹤
+  lastImportedAt      DateTime     @default(now())
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  auditLogs           AuditLog[]
+
+  @@unique([businessUnit, uid])
+}
+
+model AuditLog {
+  id           String      @id @default(uuid())
+  caseRecordId String?
+  caseRecord   CaseRecord? @relation(fields: [caseRecordId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action       String      // 例如: "UPDATE_2C_NOTICE", "UPDATE_FA_DEMAND", "CLOSE_CASE", "IMPORT_REPORT"
+  details      String      // JSON string of changes
+  createdAt    DateTime    @default(now())
+}
+
+model ImportHistory {
+  id           String   @id @default(uuid())
+  fileName     String
+  businessUnit String   // "VALET" | "PEPPER"
+  totalCount   Int
+  newCount     Int
+  updatedCount Int
+  uploadedBy   String
+  createdAt    DateTime @default(now())
+}
