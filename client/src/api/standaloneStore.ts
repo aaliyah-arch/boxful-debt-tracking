@@ -11,32 +11,32 @@ const DEFAULT_WHITELIST: WhitelistItem[] = [
   {
     id: 'wl-1',
     email: 'aaliyah@boxful.com.tw',
-    role: 'ADMIN',
-    note: '系統最高管理員 / 2C Team',
+    role: 'FA_TEAM',
+    note: 'FA 財務法務專員',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
   {
     id: 'wl-2',
     email: 'lika@boxful.com.tw',
-    role: 'TWO_C_TEAM',
-    note: '2C Team 催款專員',
+    role: 'FA_TEAM',
+    note: 'FA 財務法務專員',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
   {
     id: 'wl-3',
     email: 'steven@boxful.com.tw',
-    role: 'FA_TEAM',
-    note: 'FA 財務法務專員',
+    role: 'TWO_C_TEAM',
+    note: '2C Team 催款專員 (可上傳週報)',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
   {
     id: 'wl-4',
     email: 'andy.chen@boxful.com.tw',
-    role: 'FA_TEAM',
-    note: 'FA 財務法務專員',
+    role: 'TWO_C_TEAM',
+    note: '2C Team 催款專員 (可上傳週報)',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -235,8 +235,12 @@ export const standaloneStore = {
       const saved = localStorage.getItem(WHITELIST_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // If it's the old mock list containing 2c.team@boxful.com.tw, replace with real team
-        if (Array.isArray(parsed) && parsed.some((x: any) => x.email?.includes('2c.team@boxful.com.tw'))) {
+        // If it's the old mock list or old admin mapping, replace with correct team roles
+        if (
+          Array.isArray(parsed) &&
+          (parsed.some((x: any) => x.email?.includes('2c.team@boxful.com.tw')) ||
+           parsed.some((x: any) => x.email === 'aaliyah@boxful.com.tw' && x.role === 'ADMIN'))
+        ) {
           localStorage.setItem(WHITELIST_STORAGE_KEY, JSON.stringify(DEFAULT_WHITELIST));
           return DEFAULT_WHITELIST;
         }
@@ -356,29 +360,26 @@ export const standaloneStore = {
       const noteStr = (item.note || '').toUpperCase().trim();
 
       // Support O/X column checkboxes from Google Sheet
-      // Column B (role) = 2C Team, Column C (note) = FA Team
+      // Column B (role) = FA Team, Column C (note) = 2C Team (可上傳週報)
       if (roleStr === 'O' && noteStr === 'O') {
         role = 'ADMIN';
-      } else if (noteStr === 'O') {
-        role = 'FA_TEAM';
       } else if (roleStr === 'O') {
+        role = 'FA_TEAM';
+      } else if (noteStr === 'O') {
         role = 'TWO_C_TEAM';
       } else if (roleStr.includes('ADMIN') || roleStr.includes('主管') || roleStr.includes('管理')) {
         role = 'ADMIN';
       } else if (roleStr.includes('FA') || roleStr.includes('法務') || roleStr.includes('財務')) {
         role = 'FA_TEAM';
+      } else if (roleStr.includes('2C') || roleStr.includes('催帳') || roleStr.includes('催款')) {
+        role = 'TWO_C_TEAM';
       } else if (roleStr.includes('VIEWER') || roleStr.includes('訪客')) {
         role = 'VIEWER';
       }
 
-      // Main administrator
-      if (normalizedEmail.includes('aaliyah')) {
-        role = 'ADMIN';
-      }
-
       let defaultNote = '來自 Google 試算表同步';
-      if (role === 'ADMIN') defaultNote = '系統管理員 / 2C Team';
-      else if (role === 'TWO_C_TEAM') defaultNote = '2C Team 催款專員';
+      if (role === 'ADMIN') defaultNote = '系統管理員';
+      else if (role === 'TWO_C_TEAM') defaultNote = '2C Team 催款專員 (可上傳週報)';
       else if (role === 'FA_TEAM') defaultNote = 'FA 財務法務專員';
 
       const existingIdx = currentList.findIndex((x) => x.email.toLowerCase() === normalizedEmail);
@@ -427,10 +428,10 @@ export const standaloneStore = {
     const whitelist = standaloneStore.getWhitelist();
     const matched = whitelist.find((w) => w.email.toLowerCase() === email);
 
-    // If whitelist is present, match role; if not present, grant ADMIN if first user or admin email
-    let role: Role = matched ? matched.role : 'TWO_C_TEAM';
+    // If whitelist is present, match role; if not present, grant ADMIN if admin email
+    let role: Role = matched ? matched.role : 'VIEWER';
     if (!matched) {
-      if (whitelist.length <= 4 || email.includes('admin') || email.includes('aaliyah') || email.includes('shancai')) {
+      if (email.includes('admin')) {
         role = 'ADMIN';
         standaloneStore.addWhitelistItem({
           email,

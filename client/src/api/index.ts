@@ -27,7 +27,16 @@ export const authApi = {
       return res.data.user;
     } catch {
       const savedUser = localStorage.getItem('auth_user');
-      if (savedUser) return JSON.parse(savedUser) as User;
+      if (savedUser) {
+        const u = JSON.parse(savedUser) as User;
+        const wl = standaloneStore.getWhitelist();
+        const found = wl.find((w) => w.email.toLowerCase() === u.email.toLowerCase());
+        if (found && found.role !== u.role) {
+          u.role = found.role;
+          localStorage.setItem('auth_user', JSON.stringify(u));
+        }
+        return u;
+      }
       throw new Error('Not authenticated');
     }
   },
