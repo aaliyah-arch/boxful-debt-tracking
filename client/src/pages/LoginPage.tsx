@@ -1,26 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { AlertCircle, ArrowRight, Sparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import type { Role } from '../types';
 
 export const LoginPage: React.FC = () => {
-  const { devLogin, loginWithFirebaseGoogle, isFirebaseConfigured, isAuthenticated } = useAuth();
+  const { devLogin, loginWithFirebaseGoogle, isFirebaseConfigured } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [loadingRole, setLoadingRole] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      window.location.href = '/';
-    }
-  }, [isAuthenticated]);
 
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
     setError(null);
     try {
       await loginWithFirebaseGoogle();
-      window.location.href = '/';
     } catch (err: any) {
       setError(err.message || 'Google 登入失敗');
     } finally {
@@ -33,7 +26,6 @@ export const LoginPage: React.FC = () => {
     setError(null);
     try {
       await devLogin(role);
-      window.location.href = '/';
     } catch (err: any) {
       setError(err.message || '登入失敗');
     } finally {

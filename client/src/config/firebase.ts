@@ -2,12 +2,12 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, type Auth } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyD3mj3W295Cd0KM0WL5TLnrl7tGn5IMpis',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'bad-debt-login.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'bad-debt-login',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'bad-debt-login.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '839929750225',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:839929750225:web:0bc2ef4abd19f4c07f9bf0',
 };
 
 export const isFirebaseConfigured = Boolean(

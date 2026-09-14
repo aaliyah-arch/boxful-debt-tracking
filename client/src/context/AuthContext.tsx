@@ -106,7 +106,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_user');
     setUser(null);
-    window.location.href = '/login';
   };
 
   const is2CTeam = user?.role === 'TWO_C_TEAM' || user?.role === 'ADMIN';
