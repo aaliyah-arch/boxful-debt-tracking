@@ -6,7 +6,6 @@ import { Navbar } from './components/Navbar';
 import { ReportUploadModal } from './components/ReportUploadModal';
 import { DashboardPage } from './pages/DashboardPage';
 import { CaseListPage } from './pages/CaseListPage';
-import { WhitelistPage } from './pages/WhitelistPage';
 import { LoginPage } from './pages/LoginPage';
 
 import { standaloneStore, DEFAULT_GAS_URL } from './api/standaloneStore';
@@ -23,7 +22,7 @@ const queryClient = new QueryClient({
 const MainLayout: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const [businessUnit, setBusinessUnit] = useState<BusinessUnit>('VALET');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'cases' | 'whitelist'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'cases'>('dashboard');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [caseFilterPreset, setCaseFilterPreset] = useState<{ stage?: string; monthBucket?: string }>({});
 
@@ -98,8 +97,6 @@ const MainLayout: React.FC = () => {
             onOpenUpload={() => setIsUploadOpen(true)}
           />
         )}
-
-        {activeTab === 'whitelist' && <WhitelistPage />}
       </main>
 
       {/* Outstanding Report Upload Modal */}

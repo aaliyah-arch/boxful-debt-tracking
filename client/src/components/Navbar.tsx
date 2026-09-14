@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Users, ShieldCheck, Upload, LogOut, User as UserIcon } from 'lucide-react';
+import { LayoutDashboard, Users, Upload, LogOut, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import type { BusinessUnit, Role } from '../types';
 
@@ -7,8 +7,8 @@ interface NavbarProps {
   currentBusinessUnit: BusinessUnit;
   onBusinessUnitChange: (unit: BusinessUnit) => void;
   onOpenUpload: () => void;
-  activeTab: 'dashboard' | 'cases' | 'whitelist';
-  setActiveTab: (tab: 'dashboard' | 'cases' | 'whitelist') => void;
+  activeTab: 'dashboard' | 'cases';
+  setActiveTab: (tab: 'dashboard' | 'cases') => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -18,7 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
 }) => {
-  const { user, logout, is2CTeam, isAdmin } = useAuth();
+  const { user, logout, is2CTeam } = useAuth();
 
   const getRoleBadge = (role?: Role) => {
     switch (role) {
@@ -73,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <nav className="hidden md:flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl">
               <button
                 onClick={() => setActiveTab('dashboard')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
                   activeTab === 'dashboard'
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -85,7 +85,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               <button
                 onClick={() => setActiveTab('cases')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
                   activeTab === 'cases'
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -94,20 +94,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Users className="w-4 h-4 text-indigo-600" />
                 案件清單
               </button>
-
-              {isAdmin && (
-                <button
-                  onClick={() => setActiveTab('whitelist')}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                    activeTab === 'whitelist'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <ShieldCheck className="w-4 h-4 text-amber-600" />
-                  權限白名單
-                </button>
-              )}
             </nav>
           </div>
 
