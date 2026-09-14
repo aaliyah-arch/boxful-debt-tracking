@@ -7,25 +7,33 @@ const DEFAULT_ALLOWED_DOMAIN = 'boxful.com.tw';
 const DEFAULT_WHITELIST: WhitelistItem[] = [
   {
     id: 'wl-1',
-    email: 'admin@boxful.com.tw',
+    email: 'aaliyah@boxful.com.tw',
     role: 'ADMIN',
-    note: '系統最高管理員',
+    note: '系統最高管理員 / 2C Team',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
   {
     id: 'wl-2',
-    email: '2c.team@boxful.com.tw',
+    email: 'lika@boxful.com.tw',
     role: 'TWO_C_TEAM',
-    note: '2C 客服催款組專員',
+    note: '2C Team 催款專員',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
   {
     id: 'wl-3',
-    email: 'fa.team@boxful.com.tw',
+    email: 'steven@boxful.com.tw',
     role: 'FA_TEAM',
-    note: 'FA 財務法務組專員',
+    note: 'FA 財務法務專員',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'wl-4',
+    email: 'andy.chen@boxful.com.tw',
+    role: 'FA_TEAM',
+    note: 'FA 財務法務專員',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -222,7 +230,17 @@ export const standaloneStore = {
   getWhitelist: (): WhitelistItem[] => {
     try {
       const saved = localStorage.getItem(WHITELIST_STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // If it's the old mock list containing 2c.team@boxful.com.tw, replace with real team
+        if (Array.isArray(parsed) && parsed.some((x: any) => x.email?.includes('2c.team@boxful.com.tw'))) {
+          localStorage.setItem(WHITELIST_STORAGE_KEY, JSON.stringify(DEFAULT_WHITELIST));
+          return DEFAULT_WHITELIST;
+        }
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
     } catch (e) {
       console.warn('Error reading whitelist from localStorage', e);
     }
@@ -331,17 +349,41 @@ export const standaloneStore = {
       if (!item.email) continue;
       const normalizedEmail = item.email.trim().toLowerCase();
       let role: Role = 'TWO_C_TEAM';
-      const roleStr = (item.role || '').toUpperCase();
-      if (roleStr.includes('ADMIN') || roleStr.includes('主管') || roleStr.includes('管理')) role = 'ADMIN';
-      else if (roleStr.includes('FA') || roleStr.includes('法務') || roleStr.includes('財務')) role = 'FA_TEAM';
-      else if (roleStr.includes('VIEWER') || roleStr.includes('訪客')) role = 'VIEWER';
+      const roleStr = (item.role || '').toUpperCase().trim();
+      const noteStr = (item.note || '').toUpperCase().trim();
+
+      // Support O/X column checkboxes from Google Sheet
+      // Column B (role) = 2C Team, Column C (note) = FA Team
+      if (roleStr === 'O' && noteStr === 'O') {
+        role = 'ADMIN';
+      } else if (noteStr === 'O') {
+        role = 'FA_TEAM';
+      } else if (roleStr === 'O') {
+        role = 'TWO_C_TEAM';
+      } else if (roleStr.includes('ADMIN') || roleStr.includes('主管') || roleStr.includes('管理')) {
+        role = 'ADMIN';
+      } else if (roleStr.includes('FA') || roleStr.includes('法務') || roleStr.includes('財務')) {
+        role = 'FA_TEAM';
+      } else if (roleStr.includes('VIEWER') || roleStr.includes('訪客')) {
+        role = 'VIEWER';
+      }
+
+      // Main administrator
+      if (normalizedEmail.includes('aaliyah')) {
+        role = 'ADMIN';
+      }
+
+      let defaultNote = '來自 Google 試算表同步';
+      if (role === 'ADMIN') defaultNote = '系統管理員 / 2C Team';
+      else if (role === 'TWO_C_TEAM') defaultNote = '2C Team 催款專員';
+      else if (role === 'FA_TEAM') defaultNote = 'FA 財務法務專員';
 
       const existingIdx = currentList.findIndex((x) => x.email.toLowerCase() === normalizedEmail);
       const entry: WhitelistItem = {
         id: existingIdx >= 0 ? currentList[existingIdx].id : `wl-${Date.now()}-${syncedCount}`,
         email: normalizedEmail,
         role,
-        note: item.note || (existingIdx >= 0 ? currentList[existingIdx].note : '來自 Google 試算表同步'),
+        note: (item.note && item.note !== 'O' && item.note !== 'X') ? item.note : defaultNote,
         createdAt: existingIdx >= 0 ? currentList[existingIdx].createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

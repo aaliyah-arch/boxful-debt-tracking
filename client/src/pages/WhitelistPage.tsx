@@ -37,6 +37,13 @@ export const WhitelistPage: React.FC = () => {
     },
   });
 
+  // Auto sync on page visit
+  React.useEffect(() => {
+    if (gasUrl) {
+      syncMutation.mutate(gasUrl);
+    }
+  }, []);
+
   const addMutation = useMutation({
     mutationFn: whitelistApi.create,
     onSuccess: () => {
