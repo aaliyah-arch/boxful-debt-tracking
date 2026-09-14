@@ -9,6 +9,8 @@ import { CaseListPage } from './pages/CaseListPage';
 import { WhitelistPage } from './pages/WhitelistPage';
 import { LoginPage } from './pages/LoginPage';
 
+import { standaloneStore, DEFAULT_GAS_URL } from './api/standaloneStore';
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -24,6 +26,22 @@ const MainLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'cases' | 'whitelist'>('dashboard');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [caseFilterPreset, setCaseFilterPreset] = useState<{ stage?: string; monthBucket?: string }>({});
+
+  React.useEffect(() => {
+    // 1. Silent sync immediately on app launch
+    standaloneStore.syncFromGoogleAppsScript(DEFAULT_GAS_URL)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['whitelist'] }))
+      .catch((e) => console.log('[AutoSync] Startup sync skipped:', e.message));
+
+    // 2. Periodic sync every 60 seconds in the background
+    const interval = setInterval(() => {
+      standaloneStore.syncFromGoogleAppsScript(DEFAULT_GAS_URL)
+        .then(() => queryClient.invalidateQueries({ queryKey: ['whitelist'] }))
+        .catch((e) => console.log('[AutoSync] Interval sync skipped:', e.message));
+    }, 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   if (isLoading) {
     return (

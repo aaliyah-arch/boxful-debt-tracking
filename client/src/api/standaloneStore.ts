@@ -2,6 +2,9 @@ import type { BusinessUnit, CaseRecord, DashboardOverview, Role, WhitelistItem, 
 
 const WHITELIST_STORAGE_KEY = 'boxful_whitelist_data';
 const CASES_STORAGE_KEY = 'boxful_cases_data';
+export const DEFAULT_GAS_URL =
+  'https://script.google.com/macros/s/AKfycbx-1i9fSZXDylorowLFoQlz43aV1tlc3VxLDlDxA7jt1xZ_5z2npeP1QbHXoOyRm-8d/exec';
+
 const DEFAULT_ALLOWED_DOMAIN = 'boxful.com.tw';
 
 const DEFAULT_WHITELIST: WhitelistItem[] = [
@@ -403,7 +406,7 @@ export const standaloneStore = {
   },
 
   // Auth Operations
-  loginWithGoogleFallback: (userInfo: { email?: string; name?: string; avatarUrl?: string }): { token: string; user: User } => {
+  loginWithGoogleFallback: async (userInfo: { email?: string; name?: string; avatarUrl?: string }): Promise<{ token: string; user: User }> => {
     const email = (userInfo.email || '').trim().toLowerCase();
     if (!email) {
       throw new Error('未取得 Google 信箱資訊');
@@ -414,13 +417,20 @@ export const standaloneStore = {
       throw new Error(`登入失敗：僅限 @${DEFAULT_ALLOWED_DOMAIN} 企業網域登入（目前帳號為 ${email}）`);
     }
 
+    // Auto-sync latest permissions from Google Sheet before completing login
+    try {
+      await standaloneStore.syncFromGoogleAppsScript(DEFAULT_GAS_URL);
+    } catch (e) {
+      console.warn('Auto sync on login failed/offline:', e);
+    }
+
     const whitelist = standaloneStore.getWhitelist();
     const matched = whitelist.find((w) => w.email.toLowerCase() === email);
 
     // If whitelist is present, match role; if not present, grant ADMIN if first user or admin email
     let role: Role = matched ? matched.role : 'TWO_C_TEAM';
     if (!matched) {
-      if (whitelist.length <= 3 || email.includes('admin') || email.includes('shancai')) {
+      if (whitelist.length <= 4 || email.includes('admin') || email.includes('aaliyah') || email.includes('shancai')) {
         role = 'ADMIN';
         standaloneStore.addWhitelistItem({
           email,

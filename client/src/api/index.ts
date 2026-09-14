@@ -10,7 +10,7 @@ export const authApi = {
       return res.data;
     } catch {
       // Fallback to client-side authentication on GitHub Pages
-      return standaloneStore.loginWithGoogleFallback(body);
+      return await standaloneStore.loginWithGoogleFallback(body);
     }
   },
   devLogin: async (role: Role) => {
