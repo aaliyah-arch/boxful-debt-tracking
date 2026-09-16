@@ -1,7 +1,9 @@
 import type { BusinessUnit, CaseRecord, DashboardOverview, Role, WhitelistItem, User } from '../types';
+import { parseSpreadsheetFile, generateSampleExcelBlob, computeStage } from '../utils/reportParser';
 
 const WHITELIST_STORAGE_KEY = 'boxful_whitelist_data';
 const CASES_STORAGE_KEY = 'boxful_cases_data';
+const IMPORT_HISTORY_STORAGE_KEY = 'boxful_import_history';
 export const DEFAULT_GAS_URL =
   'https://script.google.com/macros/s/AKfycbx-1i9fSZXDylorowLFoQlz43aV1tlc3VxLDlDxA7jt1xZ_5z2npeP1QbHXoOyRm-8d/exec';
 
@@ -21,6 +23,27 @@ function syncUpdateToGas(businessUnit: string, uid: string, fields: Record<strin
         fields,
       }),
     }).catch((e) => console.warn('[GAS Sync] 試算表同步回寫略過:', e.message));
+  } catch (e) {
+    // ignore
+  }
+}
+
+async function syncReportToGas(
+  action: 'OVERWRITE_RAW_REPORT' | 'SYNC_SUMMARY_TRACKING',
+  businessUnit: BusinessUnit,
+  extraPayload: Record<string, any>
+) {
+  if (!DEFAULT_DEBT_BACKUP_GAS_URL) return;
+  try {
+    fetch(DEFAULT_DEBT_BACKUP_GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action,
+        businessUnit,
+        ...extraPayload,
+      }),
+    }).catch((e) => console.warn(`[GAS Sync] ${action} 回寫略過:`, e.message));
   } catch (e) {
     // ignore
   }
@@ -673,6 +696,196 @@ export const standaloneStore = {
         activeCases: activeCases.length,
         closedCases: closedCases.length,
         stageBreakdown,
+      },
+    };
+  },
+
+  // Report & Import Operations
+  getImportHistory: () => {
+    try {
+      const saved = localStorage.getItem(IMPORT_HISTORY_STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.warn('Error reading import history from localStorage', e);
+    }
+    return [];
+  },
+
+  downloadSampleTemplateFallback: (): Blob => {
+    return generateSampleExcelBlob();
+  },
+
+  importReportFallback: async (file: File, businessUnit: BusinessUnit) => {
+    const { rawHeaders, rawRows, parsedRawRows, aggregatedMap } = await parseSpreadsheetFile(file);
+    if (parsedRawRows.length === 0) {
+      throw new Error('檔案中未能解析出有效資料，請確認欄位包含 UID/客戶編號 及 逾期天數/金額');
+    }
+
+    const allCases = standaloneStore.getCases();
+    let newCount = 0;
+    let updatedCount = 0;
+    const currentBatchUids = new Set<string>();
+
+    for (const [uid, item] of aggregatedMap.entries()) {
+      currentBatchUids.add(uid);
+      const existingActiveIndex = allCases.findIndex(
+        (c) => c.businessUnit === businessUnit && c.uid === uid && !c.isClosed
+      );
+
+      if (existingActiveIndex >= 0) {
+        const existingActive = allCases[existingActiveIndex];
+        const stage = computeStage({
+          isClosed: false,
+          outstandingDays: item.outstandingDays,
+          terminationNoticeDate: existingActive.terminationNoticeDate,
+        });
+
+        allCases[existingActiveIndex] = {
+          ...existingActive,
+          name: item.name || existingActive.name,
+          email: item.email || existingActive.email,
+          phone: item.phone || existingActive.phone,
+          address: item.address || existingActive.address,
+          serviceType: item.serviceType || existingActive.serviceType,
+          outstandingAmount: item.totalOutstandingAmount,
+          outstandingDays: item.outstandingDays,
+          billDate: item.billDate || existingActive.billDate,
+          invId: item.invId || existingActive.invId,
+          blueCode: item.blueCode || existingActive.blueCode,
+          stage,
+          statusTag: 'NORMAL',
+          lastImportedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        updatedCount++;
+      } else {
+        const initialStage = computeStage({
+          isClosed: false,
+          outstandingDays: item.outstandingDays,
+        });
+
+        const newCase: CaseRecord = {
+          id: `case-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          uid: item.uid,
+          name: item.name,
+          email: item.email || null,
+          phone: item.phone || null,
+          businessUnit,
+          outstandingAmount: item.totalOutstandingAmount,
+          outstandingDays: item.outstandingDays,
+          billDate: item.billDate || null,
+          address: item.address || null,
+          serviceType: item.serviceType || null,
+          invId: item.invId || null,
+          blueCode: item.blueCode || null,
+          stage: initialStage,
+          statusTag: 'NORMAL',
+          isClosed: false,
+          collectionStartDate: new Date().toISOString().split('T')[0],
+          lastImportedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        allCases.unshift(newCase);
+        newCount++;
+      }
+    }
+
+    // 處理本次報表未出現但系統中仍在追蹤的案件 -> 標記為待確認結案 (PENDING_CONFIRMATION)
+    let pendingConfirmationCount = 0;
+    for (let i = 0; i < allCases.length; i++) {
+      const c = allCases[i];
+      if (c.businessUnit === businessUnit && !c.isClosed && !currentBatchUids.has(c.uid)) {
+        allCases[i] = {
+          ...c,
+          statusTag: 'PENDING_CONFIRMATION',
+          updatedAt: new Date().toISOString(),
+        };
+        pendingConfirmationCount++;
+      }
+    }
+
+    standaloneStore.saveCases(allCases);
+
+    let uName = '使用者';
+    try {
+      const savedUser = localStorage.getItem('auth_user');
+      if (savedUser) {
+        const u = JSON.parse(savedUser);
+        if (u?.name) uName = u.name;
+      }
+    } catch {}
+
+    // 記錄匯入歷史
+    try {
+      const history = standaloneStore.getImportHistory();
+      history.unshift({
+        id: `imp-${Date.now()}`,
+        fileName: file.name,
+        businessUnit,
+        totalRows: parsedRawRows.length,
+        newCases: newCount,
+        updatedCases: updatedCount,
+        uploadedBy: uName,
+        createdAt: new Date().toISOString(),
+      });
+      localStorage.setItem(IMPORT_HISTORY_STORAGE_KEY, JSON.stringify(history.slice(0, 50)));
+    } catch (e) {
+      console.warn('Failed to save import history:', e);
+    }
+
+    // 非同步回寫 Google 試算表 (2bad-debtbackup)
+    // 1. 覆蓋原始報表
+    syncReportToGas('OVERWRITE_RAW_REPORT', businessUnit, {
+      headers: rawHeaders,
+      rows: rawRows,
+    });
+
+    // 2. 同步追蹤清單
+    const summaryItems = Array.from(aggregatedMap.values()).map((c) => ({
+      uid: c.uid,
+      name: c.name,
+      email: c.email || '',
+      phone: c.phone || '',
+      serviceType: c.serviceType || '',
+      address: c.address || '',
+      outstandingDays: c.outstandingDays,
+      totalOutstandingAmount: c.totalOutstandingAmount,
+      stage: computeStage({ isClosed: false, outstandingDays: c.outstandingDays }),
+      statusTag: 'NORMAL',
+    }));
+
+    // 亦將待確認結案的清單帶上
+    allCases
+      .filter((c) => c.businessUnit === businessUnit && !c.isClosed && c.statusTag === 'PENDING_CONFIRMATION')
+      .forEach((c) => {
+        summaryItems.push({
+          uid: c.uid,
+          name: c.name,
+          email: c.email || '',
+          phone: c.phone || '',
+          serviceType: c.serviceType || '',
+          address: c.address || '',
+          outstandingDays: c.outstandingDays,
+          totalOutstandingAmount: c.outstandingAmount,
+          stage: c.stage,
+          statusTag: 'PENDING_CONFIRMATION',
+        });
+      });
+
+    syncReportToGas('SYNC_SUMMARY_TRACKING', businessUnit, {
+      items: summaryItems,
+    });
+
+    return {
+      message: `成功匯入 ${businessUnit} 報表！新增 ${newCount} 筆，更新 ${updatedCount} 筆`,
+      result: {
+        totalCount: parsedRawRows.length,
+        newCount,
+        updatedCount,
+        pendingConfirmationCount,
+        errorCount: 0,
+        errors: [],
       },
     };
   },

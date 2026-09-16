@@ -161,25 +161,34 @@ export const casesApi = {
 
 export const reportsApi = {
   upload: async (file: File, businessUnit: BusinessUnit) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('businessUnit', businessUnit);
-    const res = await api.post('/reports/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return res.data;
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('businessUnit', businessUnit);
+      const res = await api.post('/reports/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return res.data;
+    } catch {
+      // Fallback: 支援 GitHub Pages 等純靜態環境，在瀏覽器端直接解析並回寫 Google 試算表
+      return await standaloneStore.importReportFallback(file, businessUnit);
+    }
   },
   getHistory: async () => {
     try {
       const res = await api.get('/reports/history');
       return res.data.history;
     } catch {
-      return [];
+      return standaloneStore.getImportHistory();
     }
   },
   downloadSample: async () => {
-    const res = await api.get('/reports/sample-template', { responseType: 'blob' });
-    return res.data;
+    try {
+      const res = await api.get('/reports/sample-template', { responseType: 'blob' });
+      return res.data;
+    } catch {
+      return standaloneStore.downloadSampleTemplateFallback();
+    }
   },
 };
 
