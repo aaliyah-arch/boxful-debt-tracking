@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ArrowUpDown,
   RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { BusinessUnit } from '../types';
@@ -29,6 +30,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
   initialStage = '',
 }) => {
   const [stageFilter, setStageFilter] = useState<string>(initialStage);
+  const [statusTagFilter, setStatusTagFilter] = useState<string>('');
   const [search, setSearch] = useState('');
   const [contactStatus, setContactStatus] = useState('');
   const [minDays, setMinDays] = useState<number | undefined>(undefined);
@@ -44,6 +46,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
       'cases-list',
       businessUnit,
       stageFilter,
+      statusTagFilter,
       search,
       contactStatus,
       minDays,
@@ -56,6 +59,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
       casesApi.list({
         businessUnit,
         stage: stageFilter || undefined,
+        statusTag: statusTagFilter || undefined,
         search: search || undefined,
         contactStatus: contactStatus || undefined,
         minDays: minDays,
@@ -144,6 +148,34 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
               Pepper 欠款案件
             </button>
           </div>
+
+          {/* 待確認是否結案快捷篩選 */}
+          <button
+            onClick={() => {
+              if (statusTagFilter === 'PENDING_CONFIRMATION') {
+                setStatusTagFilter('');
+              } else {
+                setStatusTagFilter('PENDING_CONFIRMATION');
+                setStageFilter('');
+              }
+              setPage(1);
+            }}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+              statusTagFilter === 'PENDING_CONFIRMATION'
+                ? 'bg-amber-500 text-white border-amber-600 shadow-xs ring-2 ring-amber-500/20'
+                : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+            }`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            待確認是否結案
+            {(data?.pendingConfirmationCount ?? 0) > 0 && (
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                statusTagFilter === 'PENDING_CONFIRMATION' ? 'bg-white text-amber-600' : 'bg-amber-600 text-white'
+              }`}>
+                {data?.pendingConfirmationCount}
+              </span>
+            )}
+          </button>
 
           <button
             onClick={() => refetch()}
@@ -320,8 +352,22 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
 
                     {/* Name & Contact Info */}
                     <td className="py-3 px-3">
-                      <div className="font-semibold text-slate-900">{item.name}</div>
-                      <div className="text-[11px] text-slate-400 font-mono">{item.phone || item.email || '-'}</div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-slate-900">{item.name}</span>
+                        {item.statusTag === 'PENDING_CONFIRMATION' && !item.isClosed && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            待確認結案
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono mt-0.5">{item.phone || item.email || '-'}</div>
+                      {/* Valet 專屬：顯示服務類型與地址 */}
+                      {businessUnit === 'VALET' && (item.serviceType || item.address) && (
+                        <div className="text-[10px] text-slate-500 truncate max-w-xs mt-0.5">
+                          {item.serviceType && <span className="text-indigo-600 font-medium mr-1.5">[{item.serviceType}]</span>}
+                          {item.address}
+                        </div>
+                      )}
                     </td>
 
                     {/* Amount */}

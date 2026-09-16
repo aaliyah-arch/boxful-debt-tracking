@@ -64,6 +64,7 @@ export interface CaseListQuery {
   minDays?: number;
   maxDays?: number;
   contactStatus?: string;
+  statusTag?: string;
   page?: number;
   pageSize?: number;
   sortBy?: string;
@@ -82,17 +83,23 @@ export const casesApi = {
           totalPages: number;
         };
         totalAmountSum: number;
+        pendingConfirmationCount?: number;
       }>('/cases', { params });
       return res.data;
     } catch {
       let items = standaloneStore.getCases();
       if (params.businessUnit) items = items.filter((c) => c.businessUnit === params.businessUnit);
       if (params.stage) items = items.filter((c) => c.stage === params.stage);
+      if (params.statusTag) items = items.filter((c) => c.statusTag === params.statusTag);
       if (params.search) {
         const s = params.search.toLowerCase();
         items = items.filter((c) => c.name.toLowerCase().includes(s) || c.uid.toLowerCase().includes(s));
       }
       const totalAmountSum = items.reduce((sum, c) => sum + c.outstandingAmount, 0);
+      const pendingConfirmationCount = standaloneStore.getCases().filter(
+        (c) => (!params.businessUnit || c.businessUnit === params.businessUnit) && !c.isClosed && c.statusTag === 'PENDING_CONFIRMATION'
+      ).length;
+
       return {
         items,
         pagination: {
@@ -102,6 +109,7 @@ export const casesApi = {
           totalPages: 1,
         },
         totalAmountSum,
+        pendingConfirmationCount,
       };
     }
   },

@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { startOfMonth, subMonths, isBefore, format } from 'date-fns';
 import prisma from '../prisma';
 import { computeStage } from './stageService';
+import { updateRowStatusInSheet } from './googleSheetService';
 
 export interface CaseFilterParams {
   businessUnit?: 'VALET' | 'PEPPER';
@@ -9,6 +10,7 @@ export interface CaseFilterParams {
   monthBucket?: string; // 'older' | 'm_minus_2' | 'm_minus_1' | 'current'
   isClosed?: boolean;
   search?: string;
+  statusTag?: string; // 'PENDING_CONFIRMATION' | 'NORMAL'
   minDays?: number;
   maxDays?: number;
   contactStatus?: string; // 'line_contacted' | 'email_contacted' | 'phone_contacted' | 'uncontacted'
@@ -42,6 +44,10 @@ export async function getCases(params: CaseFilterParams) {
     where.isClosed = params.isClosed;
   }
 
+  if (params.statusTag) {
+    where.statusTag = params.statusTag;
+  }
+
   if (params.minDays !== undefined || params.maxDays !== undefined) {
     where.outstandingDays = {};
     if (params.minDays !== undefined) where.outstandingDays.gte = Number(params.minDays);
@@ -57,6 +63,8 @@ export async function getCases(params: CaseFilterParams) {
       { phone: { contains: s } },
       { twoCNotes: { contains: s } },
       { faNotes: { contains: s } },
+      { address: { contains: s } },
+      { serviceType: { contains: s } },
     ];
   }
 
@@ -84,13 +92,20 @@ export async function getCases(params: CaseFilterParams) {
     orderBy.outstandingDays = 'desc';
   }
 
-  const [totalCount, items] = await Promise.all([
+  const [totalCount, items, pendingCount] = await Promise.all([
     prisma.caseRecord.count({ where }),
     prisma.caseRecord.findMany({
       where,
       skip,
       take: pageSize,
       orderBy,
+    }),
+    prisma.caseRecord.count({
+      where: {
+        ...(params.businessUnit ? { businessUnit: params.businessUnit } : {}),
+        isClosed: false,
+        statusTag: 'PENDING_CONFIRMATION',
+      },
     }),
   ]);
 
@@ -111,6 +126,7 @@ export async function getCases(params: CaseFilterParams) {
       totalPages: Math.ceil(totalCount / pageSize),
     },
     totalAmountSum: aggregates._sum.outstandingAmount || 0,
+    pendingConfirmationCount: pendingCount,
   };
 }
 
@@ -147,6 +163,7 @@ export async function update2CFields(
     phoneStatus?: string | null;
     twoCNotes?: string | null;
     collectionStartDate?: Date | string | null;
+    statusTag?: string | null;
   },
   userId: string
 ) {
@@ -173,6 +190,7 @@ export async function update2CFields(
       phoneNoticeDate: phoneDate,
       phoneStatus: data.phoneStatus !== undefined ? data.phoneStatus : existing.phoneStatus,
       twoCNotes: data.twoCNotes !== undefined ? data.twoCNotes : existing.twoCNotes,
+      statusTag: data.statusTag !== undefined && data.statusTag !== null ? data.statusTag : existing.statusTag,
       collectionStartDate,
     },
   });
@@ -191,6 +209,7 @@ export async function update2CFields(
           phoneNoticeDate: existing.phoneNoticeDate,
           phoneStatus: existing.phoneStatus,
           twoCNotes: existing.twoCNotes,
+          statusTag: existing.statusTag,
         },
         after: {
           lineNoticeDate: updated.lineNoticeDate,
@@ -200,10 +219,27 @@ export async function update2CFields(
           phoneNoticeDate: updated.phoneNoticeDate,
           phoneStatus: updated.phoneStatus,
           twoCNotes: updated.twoCNotes,
+          statusTag: updated.statusTag,
         },
       }),
     },
   });
+
+  // 非同步回寫 Google 試算表對應列
+  updateRowStatusInSheet(
+    existing.businessUnit as 'VALET' | 'PEPPER',
+    existing.uid,
+    {
+      lineNoticeDate: updated.lineNoticeDate ? format(updated.lineNoticeDate, 'yyyy-MM-dd') : '',
+      lineStatus: updated.lineStatus,
+      emailNoticeDate: updated.emailNoticeDate ? format(updated.emailNoticeDate, 'yyyy-MM-dd') : '',
+      emailStatus: updated.emailStatus,
+      phoneNoticeDate: updated.phoneNoticeDate ? format(updated.phoneNoticeDate, 'yyyy-MM-dd') : '',
+      phoneStatus: updated.phoneStatus,
+      twoCNotes: updated.twoCNotes,
+      statusTag: updated.statusTag,
+    }
+  ).catch((err) => console.error('[GoogleSheetSync] 2C 回寫試算表失敗:', err.message));
 
   return updated;
 }
@@ -277,6 +313,21 @@ export async function updateFAFields(
     },
   });
 
+  // 非同步回寫 Google 試算表對應列
+  updateRowStatusInSheet(
+    existing.businessUnit as 'VALET' | 'PEPPER',
+    existing.uid,
+    {
+      demandNoticeDate: updated.demandNoticeDate ? format(updated.demandNoticeDate, 'yyyy-MM-dd') : '',
+      demandDueDate: updated.demandDueDate ? format(updated.demandDueDate, 'yyyy-MM-dd') : '',
+      demandDocUrl: updated.demandDocUrl,
+      terminationNoticeDate: updated.terminationNoticeDate ? format(updated.terminationNoticeDate, 'yyyy-MM-dd') : '',
+      terminationDocUrl: updated.terminationDocUrl,
+      faNotes: updated.faNotes,
+      stage: updated.stage,
+    }
+  ).catch((err) => console.error('[GoogleSheetSync] FA 回寫試算表失敗:', err.message));
+
   return updated;
 }
 
@@ -311,20 +362,42 @@ export async function updateCaseClose(
       isClosed: data.isClosed,
       closedDate,
       stage: newStage,
+      statusTag: data.isClosed ? 'NORMAL' : existing.statusTag,
     },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      caseRecordId: id,
-      userId,
-      action: data.isClosed ? 'CLOSE_CASE' : 'REOPEN_CASE',
-      details: JSON.stringify({
-        before: { isClosed: existing.isClosed, closedDate: existing.closedDate, stage: existing.stage },
-        after: { isClosed: updated.isClosed, closedDate: updated.closedDate, stage: updated.stage },
-      }),
-    },
-  });
+  if (userId) {
+    try {
+      const userExists = await prisma.user.findUnique({ where: { id: userId } });
+      if (userExists) {
+        await prisma.auditLog.create({
+          data: {
+            caseRecordId: id,
+            userId,
+            action: data.isClosed ? 'CLOSE_CASE' : 'REOPEN_CASE',
+            details: JSON.stringify({
+              before: { isClosed: existing.isClosed, closedDate: existing.closedDate, stage: existing.stage },
+              after: { isClosed: updated.isClosed, closedDate: updated.closedDate, stage: updated.stage },
+            }),
+          },
+        });
+      }
+    } catch (e: any) {
+      console.warn('[AuditLog] 記錄審計日誌略過:', e.message);
+    }
+  }
+
+  // 非同步回寫 Google 試算表對應列（結案狀態與結案日期）
+  updateRowStatusInSheet(
+    existing.businessUnit as 'VALET' | 'PEPPER',
+    existing.uid,
+    {
+      isClosed: updated.isClosed,
+      closedDate: updated.closedDate ? format(updated.closedDate, 'yyyy-MM-dd') : '',
+      stage: updated.stage,
+      statusTag: updated.statusTag,
+    }
+  ).catch((err) => console.error('[GoogleSheetSync] 結案回寫試算表失敗:', err.message));
 
   return updated;
 }

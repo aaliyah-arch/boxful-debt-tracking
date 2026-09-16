@@ -40,6 +40,14 @@ model CaseRecord {
   outstandingDays     Int          // 逾期天數 (Outstanding Days)
   billDate            DateTime?    // 帳單/應繳日
   
+  // 擴充欄位 (支援 OutstandingReport 格式)
+  address             String?      // 地址 (Valet 專用)
+  serviceType         String?      // 服務類型 Type of Service (Valet 專用)
+  invId               String?      // 發票編號 Inv ID
+  invoicedAmount      Float?       // 發票金額 Invoiced Amount
+  blueCode            String?      // Blue Code
+  statusTag           String       @default("NORMAL") // "NORMAL" | "PENDING_CONFIRMATION" (待確認是否結案)
+  
   // 階段狀態
   stage               String       @default("UNREACHED") // "UNREACHED" | "STAGE_1" | "STAGE_2" | "STAGE_3" | "STAGE_4" | "CLOSED"
   isClosed            Boolean      @default(false)
@@ -70,7 +78,8 @@ model CaseRecord {
 
   auditLogs           AuditLog[]
 
-  @@unique([businessUnit, uid])
+  @@index([businessUnit, uid])
+  @@index([businessUnit, uid, isClosed])
 }
 
 model AuditLog {

@@ -231,7 +231,10 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
                 <CheckCircle className="w-5 h-5 text-emerald-600" />
                 <span>{result.message}</span>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <p className="text-xs text-emerald-700">
+                ✨ 系統已完成人名/UID 金額加總彙整，並自動非同步回寫 Google 試算表（2bad-debtbackup）對應原始與追蹤分頁。
+              </p>
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
                 <div className="bg-white/80 p-2 rounded-lg border border-emerald-100">
                   <span className="text-slate-500 block">總解析筆數</span>
                   <span className="font-bold text-slate-800 text-base">{result.result.totalCount}</span>
@@ -243,6 +246,10 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
                 <div className="bg-white/80 p-2 rounded-lg border border-emerald-100">
                   <span className="text-indigo-600 block">更新既有案件</span>
                   <span className="font-bold text-indigo-700 text-base">{result.result.updatedCount}</span>
+                </div>
+                <div className="bg-white/80 p-2 rounded-lg border border-amber-200 bg-amber-50/50">
+                  <span className="text-amber-700 block font-medium">待確認結案</span>
+                  <span className="font-bold text-amber-800 text-base">{result.result.pendingConfirmationCount ?? 0}</span>
                 </div>
               </div>
               {result.result.errorCount > 0 && (

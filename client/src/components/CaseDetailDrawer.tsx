@@ -244,6 +244,49 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
 
           {caseData && (
             <>
+              {/* 待確認是否結案提示 (未在最新每週報表中出現) */}
+              {caseData.statusTag === 'PENDING_CONFIRMATION' && !caseData.isClosed && (
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start justify-between gap-3 animate-fade-in">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-amber-900">狀態：待確認是否結案</h4>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        本客戶未出現在本週最新匯入的 OutstandingReport 中，可能已完成補繳或銷帳。請 2C 催帳人員核對後調整結案狀態。
+                      </p>
+                    </div>
+                  </div>
+                  {is2CTeam && (
+                    <button
+                      type="button"
+                      disabled={isSavingClose}
+                      onClick={async () => {
+                        setIsSavingClose(true);
+                        try {
+                          const today = format(new Date(), 'yyyy-MM-dd');
+                          const res = await casesApi.closeCase(caseData.id, {
+                            isClosed: true,
+                            closedDate: today,
+                          });
+                          setCaseData(res.case);
+                          setIsClosed(true);
+                          setClosedDate(today);
+                          setFeedbackMsg({ type: 'success', text: '已確認結案並即時回寫 Google 試算表！' });
+                          if (onCaseUpdated) onCaseUpdated(res.case);
+                        } catch (err: any) {
+                          setFeedbackMsg({ type: 'error', text: err.message || '結案失敗' });
+                        } finally {
+                          setIsSavingClose(false);
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold whitespace-nowrap shadow-xs transition-colors flex-shrink-0"
+                    >
+                      {isSavingClose ? '處理中...' : '確認結案'}
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Section 1: Customer Info Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200/80">
                 <div>
@@ -260,6 +303,27 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     {caseData.email || '無 Email'}
                   </span>
                 </div>
+
+                {/* Valet 專屬：服務類型 (Type of Service) */}
+                {caseData.businessUnit === 'VALET' && (
+                  <div>
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">服務類型 (Service)</span>
+                    <span className="text-xs font-medium text-slate-800 mt-0.5 block truncate">
+                      {caseData.serviceType || '一般倉儲'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Valet 專屬：地址 (Address) */}
+                {caseData.businessUnit === 'VALET' && (
+                  <div className="sm:col-span-2">
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">地址 (Address)</span>
+                    <span className="text-xs font-medium text-slate-800 mt-0.5 block truncate" title={caseData.address || ''}>
+                      {caseData.address || '未提供地址'}
+                    </span>
+                  </div>
+                )}
+
                 <div>
                   <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">帳單/應繳日</span>
                   <span className="text-xs font-medium text-slate-800 flex items-center gap-1 mt-0.5">

@@ -5,6 +5,27 @@ const CASES_STORAGE_KEY = 'boxful_cases_data';
 export const DEFAULT_GAS_URL =
   'https://script.google.com/macros/s/AKfycbx-1i9fSZXDylorowLFoQlz43aV1tlc3VxLDlDxA7jt1xZ_5z2npeP1QbHXoOyRm-8d/exec';
 
+export const DEFAULT_DEBT_BACKUP_GAS_URL =
+  'https://script.google.com/macros/s/AKfycbzbayhWa_N7qzx_jhw7R9uRp1v6itw7zK8amzcbdEXHMP96mt91dXaPnUPhuEj9JvcR/exec';
+
+function syncUpdateToGas(businessUnit: string, uid: string, fields: Record<string, any>) {
+  if (!DEFAULT_DEBT_BACKUP_GAS_URL) return;
+  try {
+    fetch(DEFAULT_DEBT_BACKUP_GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'UPDATE_ROW_STATUS',
+        businessUnit,
+        uid,
+        fields,
+      }),
+    }).catch((e) => console.warn('[GAS Sync] 試算表同步回寫略過:', e.message));
+  } catch (e) {
+    // ignore
+  }
+}
+
 const DEFAULT_ALLOWED_DOMAIN = 'boxful.com.tw';
 
 const DEFAULT_WHITELIST: WhitelistItem[] = [
@@ -499,6 +520,7 @@ export const standaloneStore = {
     if (index >= 0) {
       cases[index] = { ...cases[index], ...data, updatedAt: new Date().toISOString() };
       standaloneStore.saveCases(cases);
+      syncUpdateToGas(cases[index].businessUnit, cases[index].uid, data);
       return cases[index];
     }
     throw new Error('找不到該案件');
@@ -510,6 +532,7 @@ export const standaloneStore = {
     if (index >= 0) {
       cases[index] = { ...cases[index], ...data, updatedAt: new Date().toISOString() };
       standaloneStore.saveCases(cases);
+      syncUpdateToGas(cases[index].businessUnit, cases[index].uid, data);
       return cases[index];
     }
     throw new Error('找不到該案件');
@@ -524,9 +547,15 @@ export const standaloneStore = {
         isClosed: data.isClosed,
         closedDate: data.isClosed ? data.closedDate || new Date().toISOString() : null,
         stage: data.isClosed ? 'CLOSED' : cases[index].stage,
+        statusTag: data.isClosed ? 'NORMAL' : cases[index].statusTag,
         updatedAt: new Date().toISOString(),
       };
       standaloneStore.saveCases(cases);
+      syncUpdateToGas(cases[index].businessUnit, cases[index].uid, {
+        isClosed: data.isClosed,
+        closedDate: cases[index].closedDate,
+        stage: cases[index].stage,
+      });
       return cases[index];
     }
     throw new Error('找不到該案件');

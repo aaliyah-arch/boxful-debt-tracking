@@ -36,6 +36,12 @@ export interface CaseRecord {
   outstandingAmount: number;
   outstandingDays: number;
   billDate?: string | null;
+  address?: string | null;
+  serviceType?: string | null;
+  invId?: string | null;
+  invoicedAmount?: number | null;
+  blueCode?: string | null;
+  statusTag?: string; // 'NORMAL' | 'PENDING_CONFIRMATION' (待確認是否結案)
   stage: StageType;
   isClosed: boolean;
   closedDate?: string | null;
