@@ -279,7 +279,7 @@ export async function parseSpreadsheetFile(file: File): Promise<{
       });
     } else {
       const existing = aggregatedMap.get(uid)!;
-      existing.totalOutstandingAmount = Math.max totalOutstandingAmount;
+      existing.totalOutstandingAmount = Math.max(existing.totalOutstandingAmount,totalOutstandingAmount);
       existing.outstandingDays = Math.max(existing.outstandingDays, outstandingDays);
       existing.invoiceCount += 1;
       if (!existing.email && email) existing.email = email;
