@@ -172,6 +172,118 @@ function getOrCreateSheet(ss, sheetName, defaultHeaders) {
 }
 
 /**
+ * 欄位別名：試算表表頭若使用以下寫法，也視為同一個欄位
+ */
+var HEADER_ALIASES = {
+  'NAME': ['Name', '姓名', '客戶名稱'],
+  '地址': ['Address'],
+  'Type of Service': ['Service Type', '服務類型'],
+  'Phone': ['電話'],
+  '催帳階段/狀態': ['催帳階段', '催帳狀態'],
+  '最後更新時間': ['更新時間']
+};
+
+/**
+ * 正規化表頭文字（忽略大小寫、空白與全形/半形斜線差異）
+ */
+function normalizeHeader(h) {
+  return String(h == null ? '' : h)
+    .replace(/[\s　]+/g, '')
+    .replace(/／/g, '/')
+    .toLowerCase();
+}
+
+/**
+ * 依「試算表第一列的實際表頭」建立 欄位名稱 -> 欄索引(0-based) 對照表。
+ * 不再依賴程式內寫死的欄位順序，避免試算表欄位順序不同時寫錯欄。
+ * 若試算表缺少某個系統欄位，會自動補在最右側（不會移動既有欄位）。
+ */
+function resolveColumns(sheet, canonicalHeaders) {
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var actual = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+
+  var lookup = {};
+  for (var c = 0; c < actual.length; c++) {
+    var key = normalizeHeader(actual[c]);
+    if (key && lookup[key] === undefined) lookup[key] = c;
+  }
+
+  var map = {};
+  var missing = [];
+  for (var i = 0; i < canonicalHeaders.length; i++) {
+    var name = canonicalHeaders[i];
+    var candidates = [name].concat(HEADER_ALIASES[name] || []);
+    var idx = -1;
+    for (var j = 0; j < candidates.length; j++) {
+      var k = lookup[normalizeHeader(candidates[j])];
+      if (k !== undefined) { idx = k; break; }
+    }
+    if (idx === -1) missing.push(name);
+    map[name] = idx;
+  }
+
+  if (missing.length > 0) {
+    // 最右側有值的欄之後補上缺少的欄位
+    var used = 0;
+    for (var u = 0; u < actual.length; u++) {
+      if (String(actual[u]).trim() !== '') used = u + 1;
+    }
+    sheet.getRange(1, used + 1, 1, missing.length)
+      .setValues([missing])
+      .setFontWeight('bold');
+    for (var m = 0; m < missing.length; m++) {
+      map[missing[m]] = used + m;
+    }
+  }
+
+  var width = 0;
+  for (var n in map) {
+    if (map.hasOwnProperty(n) && map[n] + 1 > width) width = map[n] + 1;
+  }
+  width = Math.max(width, sheet.getLastColumn());
+
+  return { map: map, width: width };
+}
+
+/**
+ * 讀取資料列（第 2 列起），同時保留公式，回寫時不會把公式覆蓋成值
+ */
+function readDataBlock(sheet, width) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return { values: [], formulas: [] };
+  var range = sheet.getRange(2, 1, lastRow - 1, width);
+  return { values: range.getValues(), formulas: range.getFormulas() };
+}
+
+/**
+ * 將單列寫回試算表：只有實際變更過的儲存格寫新值，其餘保留原公式/原值
+ */
+function writeRow(sheet, sheetRowIndex, values, formulas, changed) {
+  var out = [];
+  for (var c = 0; c < values.length; c++) {
+    if (!changed[c] && formulas && formulas[c]) {
+      out.push(formulas[c]);
+    } else {
+      out.push(values[c]);
+    }
+  }
+  sheet.getRange(sheetRowIndex, 1, 1, out.length).setValues([out]);
+}
+
+/**
+ * 日期欄位：ISO 字串 (2026-10-07T00:00:00.000Z) 轉為 yyyy-MM-dd
+ */
+function normalizeDateValue(val) {
+  if (val === null || val === undefined || val === '') return '';
+  var s = String(val);
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) return Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd');
+  }
+  return val;
+}
+
+/**
  * 1. 覆蓋寫入原始報表 (OutstandingReportValet / OutstandingReportPepper)
  */
 function handleOverwriteRawReport(ss, businessUnit, headers, rows) {
@@ -214,6 +326,7 @@ function handleOverwriteRawReport(ss, businessUnit, headers, rows) {
  * 核心規則：
  * - 同一客戶若先前已結案又再欠款，不覆蓋舊紀錄，新增一筆追蹤未結案的那筆。
  * - 若有未結案的紀錄，更新其最新欠款金額、逾期天數等數值，保留先前填寫的催帳備註。
+ * - 所有欄位一律依試算表實際表頭名稱定位。
  */
 function handleSyncSummaryTracking(ss, businessUnit, items) {
   var isValet = businessUnit === 'VALET';
@@ -221,52 +334,29 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
   var headers = isValet ? VALET_TRACKING_HEADERS : PEPPER_TRACKING_HEADERS;
   var sheet = getOrCreateSheet(ss, sheetName, headers);
 
-  var lastRow = sheet.getLastRow();
-  var existingData = [];
-  if (lastRow > 1) {
-    existingData = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
-  }
-
-  // 欄位索引對應
-  var colUid = headers.indexOf('UID');
-  var colName = headers.indexOf('NAME');
-  var colDays = headers.indexOf('Outstanding Days');
-  var colAmount = headers.indexOf('Total Outstanding Amount');
-  var colEmail = headers.indexOf('Email');
-  var colPhone = headers.indexOf('Phone');
-  var colStage = headers.indexOf('催帳階段/狀態');
-  var colTag = headers.indexOf('追蹤標籤');
-  var colClosed = headers.indexOf('結案狀態');
-  var colClosedDate = headers.indexOf('結案日期');
-  var colServiceType = isValet ? headers.indexOf('Type of Service') : -1;
-  var colAddress = isValet ? headers.indexOf('地址') : -1;
-  var colUpdatedAt = headers.indexOf('最後更新時間');
+  var cols = resolveColumns(sheet, headers);
+  var col = cols.map;
+  var width = cols.width;
+  var block = readDataBlock(sheet, width);
+  var existingData = block.values;
 
   var nowStr = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss');
 
-  // 將現有工作表以 UID 分組，尋找未結案的那一列 (索引)
-  // key: UID -> array of { rowIndex: number (1-based), isClosed: boolean, row: any[] }
+  // 以 UID 分組現有資料列
   var uidMap = {};
   for (var i = 0; i < existingData.length; i++) {
     var r = existingData[i];
-    var uidVal = String(r[colUid] || '').trim();
+    var uidVal = String(r[col['UID']] || '').trim();
     if (!uidVal) continue;
-
-    var closedVal = String(r[colClosed] || '').trim();
+    var closedVal = String(r[col['結案狀態']] || '').trim();
     var isRowClosed = closedVal === '已結案' || closedVal.toLowerCase() === 'true' || closedVal === '結案';
-
-    if (!uidMap[uidVal]) {
-      uidMap[uidVal] = [];
-    }
-    uidMap[uidVal].push({
-      sheetRowIndex: i + 2, // 試算表實際列號
-      isClosed: isRowClosed,
-      data: r
-    });
+    if (!uidMap[uidVal]) uidMap[uidVal] = [];
+    uidMap[uidVal].push({ dataIndex: i, sheetRowIndex: i + 2, isClosed: isRowClosed });
   }
 
   var updatedCount = 0;
   var newCount = 0;
+  var newRows = [];
 
   for (var k = 0; k < items.length; k++) {
     var item = items[k];
@@ -274,63 +364,69 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
     if (!uid) continue;
 
     var existingEntries = uidMap[uid] || [];
-    // 找出尚未結案的那筆紀錄
     var activeEntry = null;
     for (var m = 0; m < existingEntries.length; m++) {
-      if (!existingEntries[m].isClosed) {
-        activeEntry = existingEntries[m];
-        break;
-      }
+      if (!existingEntries[m].isClosed) { activeEntry = existingEntries[m]; break; }
     }
+
+    var tagVal = item.statusTag === 'PENDING_CONFIRMATION' ? '待確認是否結案' : '正常追蹤';
 
     if (activeEntry) {
-      // 存在未結案紀錄：更新數值，保留原有催帳紀錄
-      var rowIdx = activeEntry.sheetRowIndex;
-      var curRow = activeEntry.data;
+      var curRow = existingData[activeEntry.dataIndex];
+      var changed = {};
+      var set = function (name, val) {
+        var c = col[name];
+        if (c === undefined || c === -1) return;
+        curRow[c] = val;
+        changed[c] = true;
+      };
 
-      // 更新數值
-      if (colName !== -1 && item.name) curRow[colName] = item.name;
-      if (colDays !== -1) curRow[colDays] = item.outstandingDays;
-      if (colAmount !== -1) curRow[colAmount] = item.totalOutstandingAmount;
-      if (colEmail !== -1 && item.email) curRow[colEmail] = item.email;
-      if (colPhone !== -1 && item.phone) curRow[colPhone] = item.phone;
+      if (item.name) set('NAME', item.name);
+      set('Outstanding Days', item.outstandingDays);
+      set('Total Outstanding Amount', item.totalOutstandingAmount);
+      if (item.email) set('Email', item.email);
+      if (item.phone) set('Phone', item.phone);
       if (isValet) {
-        if (colServiceType !== -1 && item.serviceType) curRow[colServiceType] = item.serviceType;
-        if (colAddress !== -1 && item.address) curRow[colAddress] = item.address;
+        if (item.serviceType) set('Type of Service', item.serviceType);
+        if (item.address) set('地址', item.address);
       }
-      if (colTag !== -1) {
-        curRow[colTag] = item.statusTag === 'PENDING_CONFIRMATION' ? '待確認是否結案' : (item.statusTag || '正常追蹤');
-      }
-      if (colStage !== -1 && item.stage) {
-        curRow[colStage] = item.stage;
-      }
-      if (colUpdatedAt !== -1) curRow[colUpdatedAt] = nowStr;
+      set('追蹤標籤', item.statusTag === 'PENDING_CONFIRMATION' ? tagVal : (item.statusTag || '正常追蹤'));
+      if (item.stage) set('催帳階段/狀態', item.stage);
+      set('最後更新時間', nowStr);
 
-      sheet.getRange(rowIdx, 1, 1, headers.length).setValues([curRow]);
+      writeRow(sheet, activeEntry.sheetRowIndex, curRow, block.formulas[activeEntry.dataIndex], changed);
       updatedCount++;
     } else {
-      // 不存在未結案紀錄（可能此客戶第一次欠款，或先前已經結案了再次欠款）
-      // 依據使用者需求：「如果已經結案如又再欠款，不會覆蓋前面欠款的紀錄，到時候追蹤的會是還沒結案的那筆」
-      // -> 新增一筆全新的列！
-      var newRow = new Array(headers.length).fill('');
-      if (colUid !== -1) newRow[colUid] = item.uid;
-      if (colName !== -1) newRow[colName] = item.name;
-      if (colDays !== -1) newRow[colDays] = item.outstandingDays;
-      if (colAmount !== -1) newRow[colAmount] = item.totalOutstandingAmount;
-      if (colEmail !== -1) newRow[colEmail] = item.email || '';
-      if (colPhone !== -1) newRow[colPhone] = item.phone || '';
+      // 第一次欠款，或先前已結案又再欠款 -> 新增一列（不覆蓋歷史紀錄）
+      var newRow = [];
+      for (var w = 0; w < width; w++) newRow.push('');
+      var put = function (name, val) {
+        var c = col[name];
+        if (c === undefined || c === -1) return;
+        newRow[c] = val;
+      };
+      put('UID', item.uid);
+      put('NAME', item.name || '');
+      put('Outstanding Days', item.outstandingDays);
+      put('Total Outstanding Amount', item.totalOutstandingAmount);
+      put('Email', item.email || '');
+      put('Phone', item.phone || '');
       if (isValet) {
-        if (colServiceType !== -1) newRow[colServiceType] = item.serviceType || '';
-        if (colAddress !== -1) newRow[colAddress] = item.address || '';
+        put('Type of Service', item.serviceType || '');
+        put('地址', item.address || '');
       }
-      if (colStage !== -1) newRow[colStage] = item.stage || 'STAGE_1';
-      if (colTag !== -1) newRow[colTag] = item.statusTag === 'PENDING_CONFIRMATION' ? '待確認是否結案' : '正常追蹤';
-      if (colClosed !== -1) newRow[colClosed] = '未結案';
-      if (colUpdatedAt !== -1) newRow[colUpdatedAt] = nowStr;
-
-      sheet.appendRow(newRow);
+      put('催帳階段/狀態', item.stage || 'STAGE_1');
+      put('追蹤標籤', tagVal);
+      put('結案狀態', '未結案');
+      put('最後更新時間', nowStr);
+      newRows.push(newRow);
       newCount++;
     }
+  }
+
+  if (newRows.length > 0) {
+    var startRow = sheet.getLastRow() + 1;
+    sheet.getRange(startRow, 1, newRows.length, width).setValues(newRows);
   }
 
   return {
@@ -344,6 +440,7 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
 /**
  * 3. 前端單筆回寫 (當 2C/FA 在前端調整催帳狀態、備註或結案狀態時即時回寫)
  * 優先比對「尚未結案」的那一筆，以確保追蹤的是當前未結案案件！
+ * 只寫入有變更的儲存格，且依試算表實際表頭定位欄位。
  */
 function handleUpdateRowStatus(ss, businessUnit, uid, fields) {
   var isValet = businessUnit === 'VALET';
@@ -353,18 +450,17 @@ function handleUpdateRowStatus(ss, businessUnit, uid, fields) {
   if (!sheet) {
     throw new Error('找不到工作表: ' + sheetName);
   }
-
-  var lastRow = sheet.getLastRow();
-  if (lastRow <= 1) {
+  if (sheet.getLastRow() <= 1) {
     throw new Error('工作表目前無資料列');
   }
 
-  var data = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
-  var colUid = headers.indexOf('UID');
-  var colClosed = headers.indexOf('結案狀態');
+  var cols = resolveColumns(sheet, headers);
+  var col = cols.map;
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, cols.width).getValues();
+  var colUid = col['UID'];
+  var colClosed = col['結案狀態'];
 
   var targetRowIdx = -1;
-  var targetRowData = null;
 
   // 優先找出該 UID 且「尚未結案」的列；若找不到則取最新的一列
   for (var i = data.length - 1; i >= 0; i--) {
@@ -374,12 +470,10 @@ function handleUpdateRowStatus(ss, businessUnit, uid, fields) {
       var isClosed = closedVal === '已結案' || closedVal === '結案';
       if (!isClosed) {
         targetRowIdx = i + 2;
-        targetRowData = r;
         break;
       }
       if (targetRowIdx === -1) {
         targetRowIdx = i + 2;
-        targetRowData = r;
       }
     }
   }
@@ -388,7 +482,6 @@ function handleUpdateRowStatus(ss, businessUnit, uid, fields) {
     return { success: false, message: '在工作表中找不到 UID ' + uid + ' 的對應列' };
   }
 
-  // 依照欄位名稱進行更新
   var fieldMapping = {
     stage: '催帳階段/狀態',
     statusTag: '追蹤標籤',
@@ -408,36 +501,70 @@ function handleUpdateRowStatus(ss, businessUnit, uid, fields) {
     terminationDocUrl: '終止函文件連結',
     faNotes: 'FA備註'
   };
+  var dateFields = {
+    closedDate: true, lineNoticeDate: true, emailNoticeDate: true, phoneNoticeDate: true,
+    demandNoticeDate: true, demandDueDate: true, terminationNoticeDate: true
+  };
 
+  var written = [];
   for (var key in fields) {
-    if (fields.hasOwnProperty(key) && fieldMapping[key]) {
-      var headerName = fieldMapping[key];
-      var colIdx = headers.indexOf(headerName);
-      if (colIdx !== -1) {
-        var val = fields[key];
-        if (key === 'isClosed') {
-          val = val ? '已結案' : '未結案';
-        } else if (key === 'statusTag') {
-          val = val === 'PENDING_CONFIRMATION' ? '待確認是否結案' : (val === 'NORMAL' ? '正常追蹤' : val);
-        } else if (val === null || val === undefined) {
-          val = '';
-        }
-        targetRowData[colIdx] = val;
-      }
+    if (!fields.hasOwnProperty(key) || !fieldMapping[key]) continue;
+    var headerName = fieldMapping[key];
+    var colIdx = col[headerName];
+    if (colIdx === undefined || colIdx === -1) continue;
+
+    var val = fields[key];
+    if (key === 'isClosed') {
+      val = val ? '已結案' : '未結案';
+    } else if (key === 'statusTag') {
+      val = val === 'PENDING_CONFIRMATION' ? '待確認是否結案' : (val === 'NORMAL' ? '正常追蹤' : val);
+    } else if (val === null || val === undefined) {
+      val = '';
+    } else if (dateFields[key]) {
+      val = normalizeDateValue(val);
     }
+
+    // 逐格寫入：只動這個欄位，不會影響同列其他欄
+    sheet.getRange(targetRowIdx, colIdx + 1).setValue(val);
+    written.push(headerName);
   }
 
-  var colUpdatedAt = headers.indexOf('最後更新時間');
-  if (colUpdatedAt !== -1) {
-    targetRowData[colUpdatedAt] = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss');
+  var colUpdatedAt = col['最後更新時間'];
+  if (colUpdatedAt !== undefined && colUpdatedAt !== -1) {
+    sheet.getRange(targetRowIdx, colUpdatedAt + 1)
+      .setValue(Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss'));
   }
-
-  sheet.getRange(targetRowIdx, 1, 1, headers.length).setValues([targetRowData]);
 
   return {
     success: true,
     sheetName: sheetName,
     rowIndex: targetRowIdx,
-    uid: uid
+    uid: uid,
+    writtenColumns: written
   };
+}
+
+/**
+ * 手動測試用：在 Apps Script 編輯器執行，檢查兩張追蹤表的欄位對應
+ * （會自動補上缺少的欄位，並在執行記錄列出每個欄位對應到哪一欄）
+ */
+function checkColumnMapping() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  [[SHEET_NAMES.VALET_TRACKING, VALET_TRACKING_HEADERS],
+   [SHEET_NAMES.PEPPER_TRACKING, PEPPER_TRACKING_HEADERS]].forEach(function (pair) {
+    var sheet = ss.getSheetByName(pair[0]);
+    if (!sheet) { Logger.log('找不到工作表: ' + pair[0]); return; }
+    var map = resolveColumns(sheet, pair[1]).map;
+    Logger.log('== ' + pair[0] + ' ==');
+    pair[1].forEach(function (h) {
+      var c = map[h];
+      Logger.log(h + ' -> ' + (c === -1 ? '(無)' : columnLetter(c + 1)));
+    });
+  });
+}
+
+function columnLetter(n) {
+  var s = '';
+  while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+  return s;
 }
