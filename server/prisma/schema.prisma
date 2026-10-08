@@ -61,6 +61,7 @@ model CaseRecord {
   emailStatus         String?      // Email 狀態
   phoneNoticeDate     DateTime?    // 電話通知日
   phoneStatus         String?      // 電話狀態 (已接聽/未接/通話中...)
+  smsNoticeDate       DateTime?    // 簡訊通知日 -> 試算表「寄簡訊日期」
   twoCNotes           String?      // 2C 備註
   
   // FA Team 催告與終止欄位
@@ -68,7 +69,14 @@ model CaseRecord {
   demandDueDate       DateTime?    // 催告到期日
   demandDocUrl        String?      // 催告 Google 雲端文件連結
   terminationNoticeDate DateTime?  // 終止函發送日期
-  terminationDocUrl   String?      // 終止函 Google 雲端文件連結
+  terminationDocUrl   String?      // 終止函 Google 雲端文件連結（前端已不使用）
+  demandMethod        String?      // 催告方式 "EMAIL" | "CERTIFIED_LETTER"
+  demandSmsDate       DateTime?    // 電子催告簡訊日期
+  terminationDueDate  DateTime?    // 服務終止到期日期
+  terminationSmsDate  DateTime?    // 終止簡訊通知日期
+  certifiedLetterUrl  String?      // 存證信函檔案連結
+  certifiedLetterReceivedDate DateTime? // 存證信函收件日期
+  certifiedLetterDueDate DateTime?  // 存證信函到期日期
   faNotes             String?      // FA 備註
   
   // 歷史與批次更新追蹤

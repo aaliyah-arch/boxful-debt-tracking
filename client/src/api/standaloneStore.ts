@@ -28,6 +28,40 @@ function syncUpdateToGas(businessUnit: string, uid: string, fields: Record<strin
   }
 }
 
+/**
+ * 上傳檔案至 Google 雲端（試算表所在資料夾的「2bad-debtbackup 附件」），回傳檔案連結
+ */
+export async function uploadFileToGas(
+  file: File,
+  meta: { businessUnit: string; uid: string; kind: string }
+): Promise<string> {
+  if (file.size > 20 * 1024 * 1024) {
+    throw new Error('檔案超過 20MB，請壓縮後再上傳');
+  }
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = () => reject(new Error('讀取檔案失敗'));
+    reader.readAsDataURL(file);
+  });
+  const res = await fetch(DEFAULT_DEBT_BACKUP_GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action: 'UPLOAD_FILE',
+      ...meta,
+      fileName: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      base64,
+    }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!json || !json.success || !json.result?.url) {
+    throw new Error(json?.error || '上傳至 Google 雲端失敗，請確認 Apps Script 已重新部署');
+  }
+  return json.result.url as string;
+}
+
 async function syncReportToGas(
   action: 'OVERWRITE_RAW_REPORT' | 'SYNC_SUMMARY_TRACKING',
   businessUnit: BusinessUnit,

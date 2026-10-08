@@ -152,6 +152,16 @@ export async function getCaseById(id: string) {
   return caseRecord;
 }
 
+function pickDate(input: Date | string | null | undefined, existing: Date | null): Date | null {
+  if (input === undefined) return existing;
+  if (input === null || input === '') return null;
+  return new Date(input);
+}
+
+function fmtDate(d: Date | null | undefined): string {
+  return d ? format(d, 'yyyy-MM-dd') : '';
+}
+
 export async function update2CFields(
   id: string,
   data: {
@@ -161,6 +171,7 @@ export async function update2CFields(
     emailStatus?: string | null;
     phoneNoticeDate?: Date | string | null;
     phoneStatus?: string | null;
+    smsNoticeDate?: Date | string | null;
     twoCNotes?: string | null;
     collectionStartDate?: Date | string | null;
     statusTag?: string | null;
@@ -177,7 +188,7 @@ export async function update2CFields(
   // Set collection start date if provided or auto-set to first notice date
   let collectionStartDate = data.collectionStartDate ? new Date(data.collectionStartDate) : existing.collectionStartDate;
   if (!collectionStartDate) {
-    collectionStartDate = lineDate || emailDate || phoneDate || null;
+    collectionStartDate = lineDate || emailDate || pickDate(data.smsNoticeDate, existing.smsNoticeDate) || phoneDate || null;
   }
 
   const updated = await prisma.caseRecord.update({
@@ -189,6 +200,7 @@ export async function update2CFields(
       emailStatus: data.emailStatus !== undefined ? data.emailStatus : existing.emailStatus,
       phoneNoticeDate: phoneDate,
       phoneStatus: data.phoneStatus !== undefined ? data.phoneStatus : existing.phoneStatus,
+      smsNoticeDate: pickDate(data.smsNoticeDate, existing.smsNoticeDate),
       twoCNotes: data.twoCNotes !== undefined ? data.twoCNotes : existing.twoCNotes,
       statusTag: data.statusTag !== undefined && data.statusTag !== null ? data.statusTag : existing.statusTag,
       collectionStartDate,
@@ -230,12 +242,10 @@ export async function update2CFields(
     existing.businessUnit as 'VALET' | 'PEPPER',
     existing.uid,
     {
-      lineNoticeDate: updated.lineNoticeDate ? format(updated.lineNoticeDate, 'yyyy-MM-dd') : '',
-      lineStatus: updated.lineStatus,
-      emailNoticeDate: updated.emailNoticeDate ? format(updated.emailNoticeDate, 'yyyy-MM-dd') : '',
-      emailStatus: updated.emailStatus,
-      phoneNoticeDate: updated.phoneNoticeDate ? format(updated.phoneNoticeDate, 'yyyy-MM-dd') : '',
-      phoneStatus: updated.phoneStatus,
+      lineNoticeDate: fmtDate(updated.lineNoticeDate),
+      emailNoticeDate: fmtDate(updated.emailNoticeDate),
+      smsNoticeDate: fmtDate(updated.smsNoticeDate),
+      phoneNoticeDate: fmtDate(updated.phoneNoticeDate),
       twoCNotes: updated.twoCNotes,
       statusTag: updated.statusTag,
     }
@@ -252,6 +262,13 @@ export async function updateFAFields(
     demandDocUrl?: string | null;
     terminationNoticeDate?: Date | string | null;
     terminationDocUrl?: string | null;
+    demandMethod?: string | null;
+    demandSmsDate?: Date | string | null;
+    terminationDueDate?: Date | string | null;
+    terminationSmsDate?: Date | string | null;
+    certifiedLetterUrl?: string | null;
+    certifiedLetterReceivedDate?: Date | string | null;
+    certifiedLetterDueDate?: Date | string | null;
     faNotes?: string | null;
   },
   userId: string
@@ -280,6 +297,13 @@ export async function updateFAFields(
       demandDocUrl: data.demandDocUrl !== undefined ? data.demandDocUrl : existing.demandDocUrl,
       terminationNoticeDate: termDate,
       terminationDocUrl: data.terminationDocUrl !== undefined ? data.terminationDocUrl : existing.terminationDocUrl,
+      demandMethod: data.demandMethod !== undefined ? data.demandMethod : existing.demandMethod,
+      demandSmsDate: pickDate(data.demandSmsDate, existing.demandSmsDate),
+      terminationDueDate: pickDate(data.terminationDueDate, existing.terminationDueDate),
+      terminationSmsDate: pickDate(data.terminationSmsDate, existing.terminationSmsDate),
+      certifiedLetterUrl: data.certifiedLetterUrl !== undefined ? data.certifiedLetterUrl : existing.certifiedLetterUrl,
+      certifiedLetterReceivedDate: pickDate(data.certifiedLetterReceivedDate, existing.certifiedLetterReceivedDate),
+      certifiedLetterDueDate: pickDate(data.certifiedLetterDueDate, existing.certifiedLetterDueDate),
       faNotes: data.faNotes !== undefined ? data.faNotes : existing.faNotes,
       stage: newStage,
     },
@@ -321,8 +345,14 @@ export async function updateFAFields(
       demandNoticeDate: updated.demandNoticeDate ? format(updated.demandNoticeDate, 'yyyy-MM-dd') : '',
       demandDueDate: updated.demandDueDate ? format(updated.demandDueDate, 'yyyy-MM-dd') : '',
       demandDocUrl: updated.demandDocUrl,
-      terminationNoticeDate: updated.terminationNoticeDate ? format(updated.terminationNoticeDate, 'yyyy-MM-dd') : '',
-      terminationDocUrl: updated.terminationDocUrl,
+      demandMethod: updated.demandMethod,
+      demandSmsDate: fmtDate(updated.demandSmsDate),
+      terminationNoticeDate: fmtDate(updated.terminationNoticeDate),
+      terminationDueDate: fmtDate(updated.terminationDueDate),
+      terminationSmsDate: fmtDate(updated.terminationSmsDate),
+      certifiedLetterUrl: updated.certifiedLetterUrl,
+      certifiedLetterReceivedDate: fmtDate(updated.certifiedLetterReceivedDate),
+      certifiedLetterDueDate: fmtDate(updated.certifiedLetterDueDate),
       faNotes: updated.faNotes,
       stage: updated.stage,
     }

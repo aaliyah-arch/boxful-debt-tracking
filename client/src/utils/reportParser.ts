@@ -165,7 +165,9 @@ export async function parseSpreadsheetFile(file: File): Promise<{
       normalized['聯絡電話'] ||
       normalized['mobile'] ||
       '';
-    const phone = rawPhone ? String(rawPhone).trim() : undefined;
+    let phone = rawPhone ? String(rawPhone).trim() : undefined;
+    // Excel 把手機存成數字時會吃掉開頭的 0（0912345678 -> 912345678）
+    if (phone && /^9\d{8}$/.test(phone)) phone = `0${phone}`;
 
     const rawAddress =
       normalized['address'] ||

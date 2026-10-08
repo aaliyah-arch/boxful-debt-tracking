@@ -13,11 +13,14 @@ import {
   History,
   ShieldAlert,
   Loader2,
+  Upload,
+  FileText,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import type { CaseRecord } from '../types';
+import type { CaseRecord, DemandMethod } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { casesApi } from '../api';
+import { uploadFileToGas } from '../api/standaloneStore';
 import { StatusBadge } from './StatusBadge';
 
 interface CaseDetailDrawerProps {
@@ -41,24 +44,30 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
 
   // Form states - 2C
   const [lineNoticeDate, setLineNoticeDate] = useState('');
-  const [lineStatus, setLineStatus] = useState('');
   const [emailNoticeDate, setEmailNoticeDate] = useState('');
-  const [emailStatus, setEmailStatus] = useState('');
+  const [smsNoticeDate, setSmsNoticeDate] = useState('');
   const [phoneNoticeDate, setPhoneNoticeDate] = useState('');
-  const [phoneStatus, setPhoneStatus] = useState('');
   const [twoCNotes, setTwoCNotes] = useState('');
 
   // Form states - FA
   const [demandNoticeDate, setDemandNoticeDate] = useState('');
   const [demandDueDate, setDemandDueDate] = useState('');
   const [demandDocUrl, setDemandDocUrl] = useState('');
+  const [demandMethod, setDemandMethod] = useState<DemandMethod | ''>('');
+  const [demandSmsDate, setDemandSmsDate] = useState('');
   const [terminationNoticeDate, setTerminationNoticeDate] = useState('');
-  const [terminationDocUrl, setTerminationDocUrl] = useState('');
+  const [terminationDueDate, setTerminationDueDate] = useState('');
+  const [terminationSmsDate, setTerminationSmsDate] = useState('');
+  const [certifiedLetterUrl, setCertifiedLetterUrl] = useState('');
+  const [certifiedLetterReceivedDate, setCertifiedLetterReceivedDate] = useState('');
+  const [certifiedLetterDueDate, setCertifiedLetterDueDate] = useState('');
   const [faNotes, setFaNotes] = useState('');
+  const [uploadingKind, setUploadingKind] = useState<string | null>(null);
 
   // Form states - Close
   const [isClosed, setIsClosed] = useState(false);
   const [closedDate, setClosedDate] = useState('');
+  const todayStr = () => format(new Date(), 'yyyy-MM-dd');
 
   const formatDateInput = (d?: string | null) => (d ? format(new Date(d), 'yyyy-MM-dd') : '');
 
@@ -71,24 +80,28 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
 
       // Populate 2C states
       setLineNoticeDate(formatDateInput(data.lineNoticeDate));
-      setLineStatus(data.lineStatus || '');
       setEmailNoticeDate(formatDateInput(data.emailNoticeDate));
-      setEmailStatus(data.emailStatus || '');
+      setSmsNoticeDate(formatDateInput(data.smsNoticeDate));
       setPhoneNoticeDate(formatDateInput(data.phoneNoticeDate));
-      setPhoneStatus(data.phoneStatus || '');
       setTwoCNotes(data.twoCNotes || '');
 
       // Populate FA states
       setDemandNoticeDate(formatDateInput(data.demandNoticeDate));
       setDemandDueDate(formatDateInput(data.demandDueDate));
       setDemandDocUrl(data.demandDocUrl || '');
+      setDemandMethod(data.demandMethod || '');
+      setDemandSmsDate(formatDateInput(data.demandSmsDate));
       setTerminationNoticeDate(formatDateInput(data.terminationNoticeDate));
-      setTerminationDocUrl(data.terminationDocUrl || '');
+      setTerminationDueDate(formatDateInput(data.terminationDueDate));
+      setTerminationSmsDate(formatDateInput(data.terminationSmsDate));
+      setCertifiedLetterUrl(data.certifiedLetterUrl || '');
+      setCertifiedLetterReceivedDate(formatDateInput(data.certifiedLetterReceivedDate));
+      setCertifiedLetterDueDate(formatDateInput(data.certifiedLetterDueDate));
       setFaNotes(data.faNotes || '');
 
       // Populate Close states
       setIsClosed(data.isClosed);
-      setClosedDate(formatDateInput(data.closedDate) || format(new Date(), 'yyyy-MM-dd'));
+      setClosedDate(formatDateInput(data.closedDate));
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err.message || '載入案件失敗' });
     } finally {
@@ -114,11 +127,9 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
     try {
       const res = await casesApi.update2C(caseData.id, {
         lineNoticeDate: lineNoticeDate || null,
-        lineStatus: lineStatus || null,
         emailNoticeDate: emailNoticeDate || null,
-        emailStatus: emailStatus || null,
+        smsNoticeDate: smsNoticeDate || null,
         phoneNoticeDate: phoneNoticeDate || null,
-        phoneStatus: phoneStatus || null,
         twoCNotes: twoCNotes || null,
       });
       setCaseData(res.case);
@@ -141,12 +152,18 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
         demandNoticeDate: demandNoticeDate || null,
         demandDueDate: demandDueDate || null,
         demandDocUrl: demandDocUrl || null,
+        demandMethod: demandMethod || null,
+        demandSmsDate: demandSmsDate || null,
         terminationNoticeDate: terminationNoticeDate || null,
-        terminationDocUrl: terminationDocUrl || null,
+        terminationDueDate: terminationDueDate || null,
+        terminationSmsDate: terminationSmsDate || null,
+        certifiedLetterUrl: certifiedLetterUrl || null,
+        certifiedLetterReceivedDate: certifiedLetterReceivedDate || null,
+        certifiedLetterDueDate: certifiedLetterDueDate || null,
         faNotes: faNotes || null,
       });
       setCaseData(res.case);
-      setFeedbackMsg({ type: 'success', text: 'FA 催告/終止紀錄已儲存' });
+      setFeedbackMsg({ type: 'success', text: '催告與終止紀錄已儲存' });
       if (onCaseUpdated) onCaseUpdated(res.case);
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err.response?.data?.error || err.message || '更新失敗' });
@@ -161,10 +178,15 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
     setIsSavingClose(true);
     setFeedbackMsg(null);
     try {
+      // 結案日期 = 轉為結案當下的日期；已結案的案件維持原結案日期
+      const effectiveClosedDate = isClosed
+        ? (caseData.isClosed && caseData.closedDate ? formatDateInput(caseData.closedDate) : todayStr())
+        : null;
       const res = await casesApi.closeCase(caseData.id, {
         isClosed,
-        closedDate: isClosed ? closedDate || new Date().toISOString() : null,
+        closedDate: effectiveClosedDate,
       });
+      setClosedDate(effectiveClosedDate || '');
       setCaseData(res.case);
       setFeedbackMsg({ type: 'success', text: isClosed ? '案件已標記為已結案' : '案件已重新開啟' });
       if (onCaseUpdated) onCaseUpdated(res.case);
@@ -174,6 +196,86 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
       setIsSavingClose(false);
     }
   };
+
+  const handleUpload = async (
+    kind: 'DEMAND_DOC' | 'CERTIFIED_LETTER',
+    file: File | undefined,
+    setUrl: (url: string) => void
+  ) => {
+    if (!file || !caseData) return;
+    setUploadingKind(kind);
+    setFeedbackMsg(null);
+    try {
+      const url = await uploadFileToGas(file, {
+        businessUnit: caseData.businessUnit,
+        uid: caseData.uid,
+        kind: kind === 'DEMAND_DOC' ? '電子催告檔' : '存證信函',
+      });
+      setUrl(url);
+      setFeedbackMsg({ type: 'success', text: `「${file.name}」已上傳至 Google 雲端，請按「儲存催告與終止紀錄」回寫試算表` });
+    } catch (err: any) {
+      setFeedbackMsg({ type: 'error', text: err.message || '檔案上傳失敗' });
+    } finally {
+      setUploadingKind(null);
+    }
+  };
+
+  const renderFileField = (
+    kind: 'DEMAND_DOC' | 'CERTIFIED_LETTER',
+    label: string,
+    url: string,
+    setUrl: (url: string) => void,
+    accent: 'amber' | 'violet'
+  ) => (
+    <div>
+      <label className="block text-xs font-medium text-slate-700 mb-1">{label}</label>
+      <div className="flex flex-wrap gap-2">
+        <input
+          type="url"
+          disabled={!isFATeam}
+          placeholder="上傳檔案，或貼上 Google 雲端連結"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          className="flex-1 min-w-0 text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-slate-100 font-mono"
+        />
+        {isFATeam && (
+          <label
+            className={`px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-1 cursor-pointer transition-colors ${
+              accent === 'amber'
+                ? 'text-amber-800 bg-amber-100 hover:bg-amber-200'
+                : 'text-violet-800 bg-violet-100 hover:bg-violet-200'
+            } ${uploadingKind ? 'opacity-50 pointer-events-none' : ''}`}
+          >
+            {uploadingKind === kind ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            {uploadingKind === kind ? '上傳中...' : '上傳檔案'}
+            <input
+              type="file"
+              className="hidden"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+              onChange={(e) => {
+                handleUpload(kind, e.target.files?.[0], setUrl);
+                e.target.value = '';
+              }}
+            />
+          </label>
+        )}
+        {url && (
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            開啟
+          </a>
+        )}
+      </div>
+    </div>
+  );
+
+  const dateInputCls =
+    'w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-slate-100';
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-xs flex justify-end animate-fade-in">
@@ -362,7 +464,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     <div>
                       <h3 className="text-sm font-bold text-slate-900">2C Team 催帳作業 (勸導期)</h3>
                       <p className="text-[11px] text-slate-500">
-                        主要管道：<strong className="text-indigo-600">Line</strong> ➜ 未聯繫到依序以 <strong>Email</strong> ➜ <strong>電話</strong> 通知
+                        主要管道：<strong className="text-indigo-600">Line</strong> ➜ 未聯繫到依序以 <strong>Email</strong> ➜ <strong>簡訊</strong> ➜ <strong>電話</strong> 通知
                       </p>
                     </div>
                   </div>
@@ -371,7 +473,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                   )}
                 </div>
 
-                {/* Line Notice (Primary) */}
+                {/* 通知日期：Line ➜ Email ➜ 簡訊 ➜ 電話 */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-indigo-50/40 p-3 rounded-xl border border-indigo-100/60">
                   <div>
                     <label className="block text-xs font-semibold text-indigo-950 mb-1">
@@ -386,23 +488,6 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-indigo-950 mb-1">
-                      Line 回覆狀態
-                    </label>
-                    <input
-                      type="text"
-                      disabled={!is2CTeam}
-                      placeholder="例如: 已讀未回 / 承諾 9/15 繳款"
-                      value={lineStatus}
-                      onChange={(e) => setLineStatus(e.target.value)}
-                      className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100"
-                    />
-                  </div>
-                </div>
-
-                {/* Email Notice */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">
                       📧 Email 通知日期
                     </label>
@@ -416,21 +501,16 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">
-                      Email 寄送/回覆備註
+                      💬 簡訊通知日期
                     </label>
                     <input
-                      type="text"
+                      type="date"
                       disabled={!is2CTeam}
-                      placeholder="例如: 已寄送第1次催繳信"
-                      value={emailStatus}
-                      onChange={(e) => setEmailStatus(e.target.value)}
+                      value={smsNoticeDate}
+                      onChange={(e) => setSmsNoticeDate(e.target.value)}
                       className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100"
                     />
                   </div>
-                </div>
-
-                {/* Phone Notice */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">
                       📞 電話通知日期
@@ -443,25 +523,12 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
-                      電話通話紀錄
-                    </label>
-                    <input
-                      type="text"
-                      disabled={!is2CTeam}
-                      placeholder="例如: 通話中承諾本週繳清 / 無人接聽"
-                      value={phoneStatus}
-                      onChange={(e) => setPhoneStatus(e.target.value)}
-                      className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100"
-                    />
-                  </div>
                 </div>
 
                 {/* 2C Notes */}
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">
-                    2C 催帳詳細備註
+                    2C 催帳詳細備註 <span className="text-slate-400 font-normal">(處理方式/客人回應)</span>
                   </label>
                   <textarea
                     rows={2}
@@ -495,7 +562,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       <ShieldAlert className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900">FA Team 催告與終止作業</h3>
+                      <h3 className="text-sm font-bold text-slate-900">催告與終止作業</h3>
                       <p className="text-[11px] text-slate-500">
                         滿 50 天：<strong>催告期</strong> ➜ 滿 80 天：<strong>終止期</strong> ➜ 終止函 15 天未結案/滿95天：<strong>待 write-off</strong>
                       </p>
@@ -521,57 +588,51 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        催告日期
-                      </label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">催告方式</label>
+                      <select
+                        disabled={!isFATeam}
+                        value={demandMethod}
+                        onChange={(e) => setDemandMethod(e.target.value as DemandMethod | '')}
+                        className={dateInputCls}
+                      >
+                        <option value="">請選擇</option>
+                        <option value="EMAIL">1. Email</option>
+                        <option value="CERTIFIED_LETTER">2. 存證信函</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">電子催告簡訊日期</label>
+                      <input
+                        type="date"
+                        disabled={!isFATeam}
+                        value={demandSmsDate}
+                        onChange={(e) => setDemandSmsDate(e.target.value)}
+                        className={dateInputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">催告日期</label>
                       <input
                         type="date"
                         disabled={!isFATeam}
                         value={demandNoticeDate}
                         onChange={(e) => setDemandNoticeDate(e.target.value)}
-                        className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-slate-100"
+                        className={dateInputCls}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">
-                        催告到期日
-                      </label>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">催告到期日</label>
                       <input
                         type="date"
                         disabled={!isFATeam}
                         value={demandDueDate}
                         onChange={(e) => setDemandDueDate(e.target.value)}
-                        className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-slate-100"
+                        className={dateInputCls}
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
-                      催告檔案 (Google 雲端文件連結)
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="url"
-                        disabled={!isFATeam}
-                        placeholder="https://docs.google.com/document/d/..."
-                        value={demandDocUrl}
-                        onChange={(e) => setDemandDocUrl(e.target.value)}
-                        className="flex-1 text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-slate-100 font-mono"
-                      />
-                      {demandDocUrl && (
-                        <a
-                          href={demandDocUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3 py-2 text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-lg flex items-center gap-1 transition-colors"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          開啟文件
-                        </a>
-                      )}
-                    </div>
-                  </div>
+                  {renderFileField('DEMAND_DOC', '電子催告檔', demandDocUrl, setDemandDocUrl, 'amber')}
                 </div>
 
                 {/* Termination Notice Fields (Stage 3 & 4) */}
@@ -587,45 +648,39 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
-                      終止函發送日期 (發送後15天未結案自動進入待write-off)
-                    </label>
-                    <input
-                      type="date"
-                      disabled={!isFATeam}
-                      value={terminationNoticeDate}
-                      onChange={(e) => setTerminationNoticeDate(e.target.value)}
-                      className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-slate-100"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
-                      終止函檔案 (Google 雲端文件連結)
-                    </label>
-                    <div className="flex gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">終止簡訊通知</label>
                       <input
-                        type="url"
+                        type="date"
                         disabled={!isFATeam}
-                        placeholder="https://docs.google.com/document/d/..."
-                        value={terminationDocUrl}
-                        onChange={(e) => setTerminationDocUrl(e.target.value)}
-                        className="flex-1 text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-slate-100 font-mono"
+                        value={terminationSmsDate}
+                        onChange={(e) => setTerminationSmsDate(e.target.value)}
+                        className={dateInputCls}
                       />
-                      {terminationDocUrl && (
-                        <a
-                          href={terminationDocUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-100 hover:bg-rose-200 rounded-lg flex items-center gap-1 transition-colors"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          開啟文件
-                        </a>
-                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">終止函發送日期</label>
+                      <input
+                        type="date"
+                        disabled={!isFATeam}
+                        value={terminationNoticeDate}
+                        onChange={(e) => setTerminationNoticeDate(e.target.value)}
+                        className={dateInputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">到期日期</label>
+                      <input
+                        type="date"
+                        disabled={!isFATeam}
+                        value={terminationDueDate}
+                        onChange={(e) => setTerminationDueDate(e.target.value)}
+                        className={dateInputCls}
+                      />
                     </div>
                   </div>
+                  <p className="text-[11px] text-rose-700/80">終止函發送後 15 天未結案，自動進入待 write-off</p>
                 </div>
 
                 {/* FA Notes */}
@@ -643,6 +698,37 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                   />
                 </div>
 
+                {/* 存證信函 */}
+                <div className="p-3.5 rounded-xl bg-violet-50/50 border border-violet-200/70 space-y-3">
+                  <span className="text-xs font-bold text-violet-900 flex items-center gap-1">
+                    <FileText className="w-3.5 h-3.5" />
+                    存證信函
+                  </span>
+                  {renderFileField('CERTIFIED_LETTER', '存證信函檔案', certifiedLetterUrl, setCertifiedLetterUrl, 'violet')}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">收件日期</label>
+                      <input
+                        type="date"
+                        disabled={!isFATeam}
+                        value={certifiedLetterReceivedDate}
+                        onChange={(e) => setCertifiedLetterReceivedDate(e.target.value)}
+                        className={dateInputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">到期日期</label>
+                      <input
+                        type="date"
+                        disabled={!isFATeam}
+                        value={certifiedLetterDueDate}
+                        onChange={(e) => setCertifiedLetterDueDate(e.target.value)}
+                        className={dateInputCls}
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 {isFATeam && (
                   <div className="flex justify-end pt-1">
                     <button
@@ -651,7 +737,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl transition-all shadow-xs disabled:opacity-50"
                     >
                       {isSavingFA ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                      儲存 FA 催告紀錄
+                      儲存催告與終止紀錄
                     </button>
                   </div>
                 )}
@@ -679,14 +765,11 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                 </div>
 
                 {isClosed && (
-                  <div className="pt-2 border-t border-slate-200/80 flex items-center gap-3">
-                    <label className="text-xs font-medium text-slate-700">結案日期:</label>
-                    <input
-                      type="date"
-                      value={closedDate}
-                      onChange={(e) => setClosedDate(e.target.value)}
-                      className="text-xs rounded-lg border-slate-300 bg-white px-3 py-1.5 border shadow-xs focus:ring-2 focus:ring-emerald-500"
-                    />
+                  <div className="pt-2 border-t border-slate-200/80 flex items-center gap-2 text-xs text-slate-700">
+                    <span className="font-medium">結案日期:</span>
+                    <span className="font-mono">
+                      {caseData.isClosed && closedDate ? closedDate : `${todayStr()}（儲存時自動帶入當天）`}
+                    </span>
                   </div>
                 )}
 

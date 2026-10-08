@@ -2,6 +2,8 @@ export type BusinessUnit = 'VALET' | 'PEPPER';
 
 export type Role = 'TWO_C_TEAM' | 'FA_TEAM' | 'ADMIN' | 'VIEWER';
 
+export type DemandMethod = 'EMAIL' | 'CERTIFIED_LETTER';
+
 export type StageType = 'UNREACHED' | 'STAGE_1' | 'STAGE_2' | 'STAGE_3' | 'STAGE_4' | 'CLOSED';
 
 export interface User {
@@ -52,12 +54,20 @@ export interface CaseRecord {
   emailStatus?: string | null;
   phoneNoticeDate?: string | null;
   phoneStatus?: string | null;
-  twoCNotes?: string | null;
+  smsNoticeDate?: string | null; // 簡訊通知日期 -> 試算表「寄簡訊日期」
+  twoCNotes?: string | null; // -> 試算表「處理方式/客人回應」
   demandNoticeDate?: string | null;
   demandDueDate?: string | null;
-  demandDocUrl?: string | null;
-  terminationNoticeDate?: string | null;
+  demandDocUrl?: string | null; // -> 試算表「電子催告檔」
+  demandMethod?: DemandMethod | null; // 催告方式 -> 試算表「催告方式」
+  demandSmsDate?: string | null; // -> 試算表「電子催告簡訊日期」
+  terminationNoticeDate?: string | null; // 終止函發送日期 -> 試算表「服務終止日」
+  terminationDueDate?: string | null; // -> 試算表「服務終止日」後的「到期日期」
+  terminationSmsDate?: string | null; // -> 試算表「終止簡訊通知」
   terminationDocUrl?: string | null;
+  certifiedLetterUrl?: string | null; // -> 試算表「存證信函」
+  certifiedLetterReceivedDate?: string | null; // -> 試算表「收件日期」
+  certifiedLetterDueDate?: string | null; // -> 試算表「收件日期」後的「到期日期」
   faNotes?: string | null;
   lastImportedAt: string;
   createdAt: string;

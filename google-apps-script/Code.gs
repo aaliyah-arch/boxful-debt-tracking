@@ -4,19 +4,20 @@
  * 試算表名稱: 2bad-debtbackup
  * 網址: https://docs.google.com/spreadsheets/d/1ffoagvek5LyXFv4DPQIsNzSU2FesUSZl0OF2tkLHEV4/edit?usp=sharing
  * ==============================================================================
- * 
- * 功能亮點：
- * 1. 自動建立與維護 4 個工作表分頁：
- *    - OutstandingReportValet (原始報表每週覆蓋)
- *    - OutstandingReportPepper (原始報表每週覆蓋)
- *    - Valet扣款失敗通知追蹤 (Valet 彙整與催帳/結案回寫)
- *    - Pepper扣款失敗通知追蹤 (Pepper 彙整與催帳/結案回寫)
- * 2. 智慧重複欠款支援：同一客戶若先前已結案再次欠款，保留歷史紀錄，新增一列追蹤尚未結案的那筆。
- * 3. 欄位精準區分：Valet 專屬包含「服務類型 (Type of Service)」與「地址 (Address)」，Pepper 則不含。
- * 4. 支援前端單筆即時回寫與整批報表匯入覆蓋。
+ *
+ * 功能：
+ * 1. OutstandingReportValet / OutstandingReportPepper：每週上傳的原始報表整份覆蓋。
+ * 2. Valet扣款失敗通知追蹤 / Pepper扣款失敗通知追蹤：彙整與前端回寫。
+ *    - 所有欄位一律「依試算表第一列的表頭名稱」定位，不依欄位順序。
+ *    - 表頭重複的「到期日期」依其左側最近的欄位判斷用途：
+ *        電子催告日期 → 到期日期   = 催告到期日
+ *        收件日期     → 到期日期   = 存證信函到期日期
+ *        服務終止日   → 到期日期   = 服務終止到期日期
+ * 3. 同一客戶先前已結案又再欠款：保留舊列，新增一列追蹤未結案那筆。
+ * 4. 前端上傳的電子催告檔 / 存證信函會存到試算表所在資料夾下的「2bad-debtbackup 附件」資料夾，
+ *    並把檔案連結回填到對應欄位。
  */
 
-// 定義工作表分頁名稱
 var SHEET_NAMES = {
   VALET_RAW: 'OutstandingReportValet',
   PEPPER_RAW: 'OutstandingReportPepper',
@@ -24,103 +25,100 @@ var SHEET_NAMES = {
   PEPPER_TRACKING: 'Pepper扣款失敗通知追蹤'
 };
 
-// Valet 追蹤表欄位定義
-var VALET_TRACKING_HEADERS = [
-  'UID',
-  'Type of Service',
-  'NAME',
-  'Outstanding Days',
-  'Email',
-  '地址',
-  'Total Outstanding Amount',
-  'Phone',
-  '催帳階段/狀態',
-  '追蹤標籤',
-  '結案狀態',
-  '結案日期',
-  'Line通知日',
-  'Line狀態',
-  'Email通知日',
-  'Email狀態',
-  '電話通知日',
-  '電話狀態',
-  '2C催帳備註',
-  '催告通知日',
-  '催告到期日',
-  '催告文件連結',
-  '終止函日期',
-  '終止函文件連結',
-  'FA備註',
-  '最後更新時間'
-];
-
-// Pepper 追蹤表欄位定義 (無 Type of Service 與 地址)
-var PEPPER_TRACKING_HEADERS = [
-  'UID',
-  'NAME',
-  'Email',
-  'Outstanding Days',
-  'Total Outstanding Amount',
-  'Phone',
-  '催帳階段/狀態',
-  '追蹤標籤',
-  '結案狀態',
-  '結案日期',
-  'Line通知日',
-  'Line狀態',
-  'Email通知日',
-  'Email狀態',
-  '電話通知日',
-  '電話狀態',
-  '2C催帳備註',
-  '催告通知日',
-  '催告到期日',
-  '催告文件連結',
-  '終止函日期',
-  '終止函文件連結',
-  'FA備註',
-  '最後更新時間'
-];
+var UPLOAD_FOLDER_NAME = '2bad-debtbackup 附件';
 
 /**
- * 處理 POST 請求 (API 呼叫端點)
+ * 追蹤表欄位定義
+ * key       : 前端 / 程式使用的欄位代號
+ * names     : 試算表表頭可接受的名稱（第一個為建議名稱，其餘為相容舊名稱）
+ * dupName   : 表頭重複時使用的共用名稱（例如「到期日期」）
+ * anchor    : dupName 的判斷依據：取 anchor 欄位右側最近、尚未被其他欄位認領的 dupName 欄
+ * append    : 試算表沒有這個欄位時，第一次回寫會自動補在最右側
+ * valetOnly : 只有 Valet 才有的欄位
+ * date      : 日期欄位（統一寫成 yyyy-MM-dd）
+ * text      : 強制以文字寫入（保留電話開頭的 0）
  */
+var FIELD_SPECS = [
+  // ---- 報表彙整欄位 ----
+  { key: 'uid',            names: ['UID'] },
+  { key: 'serviceType',    names: ['Type of Service', 'Service Type', '服務類型'], valetOnly: true },
+  { key: 'name',           names: ['NAME', 'Name', '姓名', '客戶名稱'] },
+  { key: 'outstandingDays',names: ['Outstanding Days', '逾期天數'] },
+  { key: 'email',          names: ['Email', 'E-mail', '信箱'] },
+  { key: 'address',        names: ['地址', 'Address'], valetOnly: true },
+  { key: 'amount',         names: ['Total Outstanding Amount', '欠款金額'] },
+  { key: 'phone',          names: ['Phone', '電話', '手機'], text: true },
+  { key: 'stage',          names: ['催帳階段/狀態', '催帳階段', '催帳狀態'] },
+  { key: 'statusTag',      names: ['追蹤標籤'] },
+  { key: 'isClosed',       names: ['結案狀態'] },
+
+  // ---- 2C 催帳 ----
+  { key: 'lineNoticeDate', names: ['LINE日期', 'Line通知日', 'LINE通知日期'], date: true, append: true },
+  { key: 'emailNoticeDate',names: ['寄信日期', 'Email通知日'], date: true, append: true },
+  { key: 'smsNoticeDate',  names: ['寄簡訊日期', '簡訊通知日'], date: true, append: true },
+  { key: 'phoneNoticeDate',names: ['電話日期', '電話通知日'], date: true },
+  { key: 'twoCNotes',      names: ['處理方式/客人回應', '2C催帳備註'], append: true },
+  { key: 'closedDate',     names: ['結案日期'], date: true, append: true },
+
+  // ---- 催告與終止 ----
+  { key: 'demandMethod',          names: ['催告方式'], append: true },
+  { key: 'demandSmsDate',         names: ['電子催告簡訊日期'], date: true, append: true },
+  { key: 'demandDocUrl',          names: ['電子催告檔', '催告文件連結'], append: true },
+  { key: 'demandNoticeDate',      names: ['電子催告日期', '催告通知日'], date: true, append: true },
+  { key: 'demandDueDate',         names: ['催告到期日', '電子催告到期日期'], dupName: '到期日期', anchor: 'demandNoticeDate', date: true },
+  { key: 'terminationSmsDate',    names: ['終止簡訊通知'], date: true, append: true },
+  { key: 'terminationNoticeDate', names: ['服務終止日', '終止函日期'], date: true, append: true },
+  { key: 'terminationDueDate',    names: ['服務終止到期日期', '終止到期日期'], dupName: '到期日期', anchor: 'terminationNoticeDate', date: true },
+  { key: 'certifiedLetterUrl',    names: ['存證信函'], append: true },
+  { key: 'certifiedLetterReceivedDate', names: ['收件日期'], date: true, append: true },
+  { key: 'certifiedLetterDueDate',names: ['存證信函到期日期'], dupName: '到期日期', anchor: 'certifiedLetterReceivedDate', date: true },
+  { key: 'faNotes',               names: ['FA備註'] },
+
+  { key: 'updatedAt',      names: ['最後更新時間', '更新時間'] }
+];
+
+// 新建立追蹤表時使用的預設表頭（已存在的工作表不會被改動）
+var DEFAULT_TRACKING_HEADERS = {
+  VALET: ['UID', 'Type of Service', 'NAME', 'Outstanding Days', 'Email', '地址', 'Total Outstanding Amount', 'Phone',
+          '催帳階段/狀態', '追蹤標籤', '結案狀態', 'LINE日期', '寄信日期', '寄簡訊日期', '處理方式/客人回應', '結案日期',
+          '催告方式', '電子催告簡訊日期', '電子催告檔', '電子催告日期', '到期日期', '終止簡訊通知',
+          '服務終止日', '到期日期', '存證信函', '收件日期', '到期日期', '最後更新時間'],
+  PEPPER: ['UID', 'NAME', 'Email', 'Outstanding Days', 'Total Outstanding Amount', 'Phone',
+           '催帳階段/狀態', '追蹤標籤', '結案狀態', 'LINE日期', '寄信日期', '寄簡訊日期', '處理方式/客人回應', '結案日期',
+           '催告方式', '電子催告簡訊日期', '電子催告檔', '電子催告日期', '到期日期', '終止簡訊通知',
+           '服務終止日', '到期日期', '存證信函', '收件日期', '到期日期', '最後更新時間']
+};
+
+// ==============================================================================
+// Web App 入口
+// ==============================================================================
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
-    // 等待最多 30 秒鎖定，避免多筆同時寫入衝突
     lock.waitLock(30000);
-    
-    var payload;
-    if (e.postData && e.postData.contents) {
-      payload = JSON.parse(e.postData.contents);
-    } else {
+
+    if (!e.postData || !e.postData.contents) {
       return jsonResponse({ success: false, error: '未提供 POST 資料' });
     }
-
+    var payload = JSON.parse(e.postData.contents);
     var action = payload.action;
     var businessUnit = (payload.businessUnit || '').toUpperCase(); // 'VALET' | 'PEPPER'
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var result;
 
     if (action === 'OVERWRITE_RAW_REPORT') {
-      // 覆蓋寫入原始報表
-      var result = handleOverwriteRawReport(ss, businessUnit, payload.headers, payload.rows);
-      return jsonResponse({ success: true, action: action, result: result });
-    } 
-    else if (action === 'SYNC_SUMMARY_TRACKING') {
-      // 同步/彙整追蹤清單
-      var result = handleSyncSummaryTracking(ss, businessUnit, payload.items);
-      return jsonResponse({ success: true, action: action, result: result });
-    } 
-    else if (action === 'UPDATE_ROW_STATUS') {
-      // 前端單筆回寫
-      var result = handleUpdateRowStatus(ss, businessUnit, payload.uid, payload.fields);
-      return jsonResponse({ success: true, action: action, result: result });
-    } 
-    else {
+      result = handleOverwriteRawReport(ss, businessUnit, payload.headers, payload.rows);
+    } else if (action === 'SYNC_SUMMARY_TRACKING') {
+      result = handleSyncSummaryTracking(ss, businessUnit, payload.items || []);
+    } else if (action === 'UPDATE_ROW_STATUS') {
+      result = handleUpdateRowStatus(ss, businessUnit, payload.uid, payload.fields || {});
+    } else if (action === 'UPLOAD_FILE') {
+      result = handleUploadFile(ss, payload);
+    } else {
       return jsonResponse({ success: false, error: '未知操作: ' + action });
     }
-
+    return jsonResponse({ success: true, action: action, result: result });
   } catch (err) {
     return jsonResponse({ success: false, error: err.toString(), stack: err.stack });
   } finally {
@@ -128,64 +126,40 @@ function doPost(e) {
   }
 }
 
-/**
- * 處理 GET 請求 (健康檢查或測試)
- */
 function doGet(e) {
   return jsonResponse({
     status: 'ok',
     message: '2bad-debtbackup Google Apps Script Web App 正常運作中',
     spreadsheetName: SpreadsheetApp.getActiveSpreadsheet().getName(),
-    sheets: SpreadsheetApp.getActiveSpreadsheet().getSheets().map(function(s) { return s.getName(); })
+    sheets: SpreadsheetApp.getActiveSpreadsheet().getSheets().map(function (s) { return s.getName(); })
   });
 }
 
-/**
- * 輔助：回傳 JSON 格式
- */
 function jsonResponse(data) {
   return ContentService.createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-/**
- * 取得或建立工作表，並設定標題樣式
- */
+// ==============================================================================
+// 欄位對應工具
+// ==============================================================================
+
 function getOrCreateSheet(ss, sheetName, defaultHeaders) {
   var sheet = ss.getSheetByName(sheetName);
-  if (!sheet) {
-    sheet = ss.insertSheet(sheetName);
-  }
-  
-  if (defaultHeaders && defaultHeaders.length > 0) {
-    var lastRow = sheet.getLastRow();
-    if (lastRow === 0) {
-      sheet.appendRow(defaultHeaders);
-      var headerRange = sheet.getRange(1, 1, 1, defaultHeaders.length);
-      headerRange.setFontWeight('bold');
-      headerRange.setBackground('#4F46E5');
-      headerRange.setFontColor('#FFFFFF');
-      sheet.setFrozenRows(1);
-    }
+  if (!sheet) sheet = ss.insertSheet(sheetName);
+  if (defaultHeaders && defaultHeaders.length > 0 && sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, defaultHeaders.length).setValues([defaultHeaders])
+      .setFontWeight('bold').setBackground('#4F46E5').setFontColor('#FFFFFF');
+    sheet.setFrozenRows(1);
   }
   return sheet;
 }
 
-/**
- * 欄位別名：試算表表頭若使用以下寫法，也視為同一個欄位
- */
-var HEADER_ALIASES = {
-  'NAME': ['Name', '姓名', '客戶名稱'],
-  '地址': ['Address'],
-  'Type of Service': ['Service Type', '服務類型'],
-  'Phone': ['電話'],
-  '催帳階段/狀態': ['催帳階段', '催帳狀態'],
-  '最後更新時間': ['更新時間']
-};
+function trackingSheetName(businessUnit) {
+  return businessUnit === 'VALET' ? SHEET_NAMES.VALET_TRACKING : SHEET_NAMES.PEPPER_TRACKING;
+}
 
-/**
- * 正規化表頭文字（忽略大小寫、空白與全形/半形斜線差異）
- */
+/** 正規化表頭：忽略大小寫、空白、全形斜線 */
 function normalizeHeader(h) {
   return String(h == null ? '' : h)
     .replace(/[\s　]+/g, '')
@@ -193,372 +167,367 @@ function normalizeHeader(h) {
     .toLowerCase();
 }
 
+function specsFor(businessUnit) {
+  var isValet = businessUnit === 'VALET';
+  return FIELD_SPECS.filter(function (s) { return isValet || !s.valetOnly; });
+}
+
 /**
- * 依「試算表第一列的實際表頭」建立 欄位名稱 -> 欄索引(0-based) 對照表。
- * 不再依賴程式內寫死的欄位順序，避免試算表欄位順序不同時寫錯欄。
- * 若試算表缺少某個系統欄位，會自動補在最右側（不會移動既有欄位）。
+ * 讀取第一列表頭，回傳 { col: {key: 0-based index 或 -1}, headers: [...], width }
  */
-function resolveColumns(sheet, canonicalHeaders) {
+function resolveColumns(sheet, businessUnit) {
   var lastCol = Math.max(sheet.getLastColumn(), 1);
-  var actual = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
 
-  var lookup = {};
-  for (var c = 0; c < actual.length; c++) {
-    var key = normalizeHeader(actual[c]);
-    if (key && lookup[key] === undefined) lookup[key] = c;
-  }
+  // 表頭名稱 -> 所有出現位置
+  var positions = {};
+  headers.forEach(function (h, i) {
+    var k = normalizeHeader(h);
+    if (!k) return;
+    (positions[k] = positions[k] || []).push(i);
+  });
 
-  var map = {};
-  var missing = [];
-  for (var i = 0; i < canonicalHeaders.length; i++) {
-    var name = canonicalHeaders[i];
-    var candidates = [name].concat(HEADER_ALIASES[name] || []);
-    var idx = -1;
-    for (var j = 0; j < candidates.length; j++) {
-      var k = lookup[normalizeHeader(candidates[j])];
-      if (k !== undefined) { idx = k; break; }
+  var specs = specsFor(businessUnit);
+  var col = {};
+  var claimed = {};
+
+  // 第一輪：唯一名稱直接比對（每個名稱取第一個出現位置）
+  specs.forEach(function (s) {
+    col[s.key] = -1;
+    for (var j = 0; j < s.names.length; j++) {
+      var p = positions[normalizeHeader(s.names[j])];
+      if (p && p.length) {
+        for (var q = 0; q < p.length; q++) {
+          if (!claimed[p[q]]) { col[s.key] = p[q]; claimed[p[q]] = true; break; }
+        }
+        if (col[s.key] !== -1) break;
+      }
     }
-    if (idx === -1) missing.push(name);
-    map[name] = idx;
-  }
+  });
 
-  if (missing.length > 0) {
-    // 最右側有值的欄之後補上缺少的欄位
-    var used = 0;
-    for (var u = 0; u < actual.length; u++) {
-      if (String(actual[u]).trim() !== '') used = u + 1;
+  // 第二輪：重複名稱（到期日期）依錨點欄位判斷，錨點靠左的先認領
+  var dupSpecs = specs.filter(function (s) { return s.dupName && col[s.key] === -1; });
+  dupSpecs.sort(function (a, b) { return (col[a.anchor] === undefined ? 9999 : col[a.anchor]) - (col[b.anchor] === undefined ? 9999 : col[b.anchor]); });
+  dupSpecs.forEach(function (s) {
+    var anchorIdx = col[s.anchor];
+    if (anchorIdx === undefined || anchorIdx === -1) return;
+    var p = positions[normalizeHeader(s.dupName)] || [];
+    for (var i = 0; i < p.length; i++) {
+      if (p[i] > anchorIdx && !claimed[p[i]]) {
+        col[s.key] = p[i];
+        claimed[p[i]] = true;
+        break;
+      }
     }
-    sheet.getRange(1, used + 1, 1, missing.length)
-      .setValues([missing])
-      .setFontWeight('bold');
-    for (var m = 0; m < missing.length; m++) {
-      map[missing[m]] = used + m;
-    }
-  }
+  });
 
-  var width = 0;
-  for (var n in map) {
-    if (map.hasOwnProperty(n) && map[n] + 1 > width) width = map[n] + 1;
-  }
-  width = Math.max(width, sheet.getLastColumn());
+  var nonEmpty = 0;
+  headers.forEach(function (h, i) { if (h !== '') nonEmpty = i + 1; });
 
-  return { map: map, width: width };
+  return { col: col, headers: headers, width: Math.max(nonEmpty, 1) };
 }
 
-/**
- * 讀取資料列（第 2 列起），同時保留公式，回寫時不會把公式覆蓋成值
- */
-function readDataBlock(sheet, width) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return { values: [], formulas: [] };
-  var range = sheet.getRange(2, 1, lastRow - 1, width);
-  return { values: range.getValues(), formulas: range.getFormulas() };
+/** 試算表缺少的欄位補在最右側（只限 append: true 的欄位） */
+function ensureColumn(sheet, cols, key) {
+  if (cols.col[key] !== undefined && cols.col[key] !== -1) return cols.col[key];
+  var spec = FIELD_SPECS.filter(function (s) { return s.key === key; })[0];
+  if (!spec || !spec.append) return -1;
+  var idx = cols.width;
+  sheet.getRange(1, idx + 1).setValue(spec.names[0]).setFontWeight('bold');
+  cols.col[key] = idx;
+  cols.headers[idx] = spec.names[0];
+  cols.width = idx + 1;
+  return idx;
 }
 
-/**
- * 將單列寫回試算表：只有實際變更過的儲存格寫新值，其餘保留原公式/原值
- */
-function writeRow(sheet, sheetRowIndex, values, formulas, changed) {
-  var out = [];
-  for (var c = 0; c < values.length; c++) {
-    if (!changed[c] && formulas && formulas[c]) {
-      out.push(formulas[c]);
-    } else {
-      out.push(values[c]);
-    }
-  }
-  sheet.getRange(sheetRowIndex, 1, 1, out.length).setValues([out]);
+function specOf(key) {
+  return FIELD_SPECS.filter(function (s) { return s.key === key; })[0] || {};
 }
 
-/**
- * 日期欄位：ISO 字串 (2026-10-07T00:00:00.000Z) 轉為 yyyy-MM-dd
- */
+/** 日期統一為 yyyy-MM-dd */
 function normalizeDateValue(val) {
   if (val === null || val === undefined || val === '') return '';
-  var s = String(val);
+  if (val instanceof Date) return Utilities.formatDate(val, 'Asia/Taipei', 'yyyy-MM-dd');
+  var s = String(val).trim();
   if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
     var d = new Date(s);
     if (!isNaN(d.getTime())) return Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd');
   }
-  return val;
+  return s;
 }
 
-/**
- * 1. 覆蓋寫入原始報表 (OutstandingReportValet / OutstandingReportPepper)
- */
+/** 電話：保留開頭 0，並強制以文字寫入 */
+function normalizePhone(val) {
+  if (val === null || val === undefined) return '';
+  var s = String(val).trim();
+  if (!s) return '';
+  if (/^9\d{8}$/.test(s)) s = '0' + s; // Excel 數字格式吃掉的 0
+  return s;
+}
+
+function asText(val) {
+  var s = String(val == null ? '' : val);
+  return s === '' ? '' : "'" + s;
+}
+
+function isClosedRow(row, col) {
+  if (col.isClosed !== -1) {
+    var v = String(row[col.isClosed] || '').trim();
+    return v === '已結案' || v === '結案' || v.toLowerCase() === 'true';
+  }
+  // 沒有「結案狀態」欄時，以「結案日期」有值視為已結案
+  if (col.closedDate !== -1) {
+    return String(row[col.closedDate] || '').trim() !== '';
+  }
+  return false;
+}
+
+function nowString() {
+  return Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss');
+}
+
+// ==============================================================================
+// 1. 覆蓋寫入原始報表
+// ==============================================================================
+
 function handleOverwriteRawReport(ss, businessUnit, headers, rows) {
   var sheetName = businessUnit === 'VALET' ? SHEET_NAMES.VALET_RAW : SHEET_NAMES.PEPPER_RAW;
   var sheet = getOrCreateSheet(ss, sheetName);
-  
-  // 清空整張工作表內容
   sheet.clearContents();
   sheet.clearFormats();
 
   if (!headers || headers.length === 0) {
-    headers = [
-      'UID', 'Name', 'Email', 'Phone', 'Address', 'Type of Service', 
-      'inv Date', 'Inv ID', 'Invoiced Amount', 'Outstanding Days', 
-      'Total Outstanding Amount', 'Blue Code'
-    ];
+    headers = ['UID', 'Name', 'Email', 'Phone', 'Address', 'Type of Service',
+      'inv Date', 'Inv ID', 'Invoiced Amount', 'Outstanding Days', 'Total Outstanding Amount', 'Blue Code'];
   }
 
-  // 寫入表頭
-  sheet.appendRow(headers);
-  var headerRange = sheet.getRange(1, 1, 1, headers.length);
-  headerRange.setFontWeight('bold');
-  headerRange.setBackground(businessUnit === 'VALET' ? '#DC2626' : '#059669');
-  headerRange.setFontColor('#FFFFFF');
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers])
+    .setFontWeight('bold')
+    .setBackground(businessUnit === 'VALET' ? '#DC2626' : '#059669')
+    .setFontColor('#FFFFFF');
   sheet.setFrozenRows(1);
 
   if (rows && rows.length > 0) {
-    var range = sheet.getRange(2, 1, rows.length, headers.length);
-    range.setValues(rows);
+    var phoneIdx = -1;
+    headers.forEach(function (h, i) { if (normalizeHeader(h) === 'phone') phoneIdx = i; });
+    var data = rows.map(function (r) {
+      var row = [];
+      for (var i = 0; i < headers.length; i++) row.push(r[i] === undefined ? '' : r[i]);
+      if (phoneIdx !== -1) row[phoneIdx] = asText(normalizePhone(row[phoneIdx]));
+      return row;
+    });
+    sheet.getRange(2, 1, data.length, headers.length).setValues(data);
   }
 
-  return {
-    sheetName: sheetName,
-    rowCount: rows ? rows.length : 0
-  };
+  return { sheetName: sheetName, rowCount: rows ? rows.length : 0 };
 }
 
-/**
- * 2. 彙整並同步至追蹤工作表 (Valet扣款失敗通知追蹤 / Pepper扣款失敗通知追蹤)
- * 核心規則：
- * - 同一客戶若先前已結案又再欠款，不覆蓋舊紀錄，新增一筆追蹤未結案的那筆。
- * - 若有未結案的紀錄，更新其最新欠款金額、逾期天數等數值，保留先前填寫的催帳備註。
- * - 所有欄位一律依試算表實際表頭名稱定位。
- */
+// ==============================================================================
+// 2. 彙整並同步至追蹤工作表
+// ==============================================================================
+
 function handleSyncSummaryTracking(ss, businessUnit, items) {
   var isValet = businessUnit === 'VALET';
-  var sheetName = isValet ? SHEET_NAMES.VALET_TRACKING : SHEET_NAMES.PEPPER_TRACKING;
-  var headers = isValet ? VALET_TRACKING_HEADERS : PEPPER_TRACKING_HEADERS;
-  var sheet = getOrCreateSheet(ss, sheetName, headers);
+  var sheetName = trackingSheetName(businessUnit);
+  var sheet = getOrCreateSheet(ss, sheetName, DEFAULT_TRACKING_HEADERS[isValet ? 'VALET' : 'PEPPER']);
+  var cols = resolveColumns(sheet, businessUnit);
+  var col = cols.col;
+  if (col.uid === -1) throw new Error('工作表「' + sheetName + '」找不到 UID 欄位');
 
-  var cols = resolveColumns(sheet, headers);
-  var col = cols.map;
   var width = cols.width;
-  var block = readDataBlock(sheet, width);
-  var existingData = block.values;
-
-  var nowStr = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss');
-
-  // 以 UID 分組現有資料列
-  var uidMap = {};
-  for (var i = 0; i < existingData.length; i++) {
-    var r = existingData[i];
-    var uidVal = String(r[col['UID']] || '').trim();
-    if (!uidVal) continue;
-    var closedVal = String(r[col['結案狀態']] || '').trim();
-    var isRowClosed = closedVal === '已結案' || closedVal.toLowerCase() === 'true' || closedVal === '結案';
-    if (!uidMap[uidVal]) uidMap[uidVal] = [];
-    uidMap[uidVal].push({ dataIndex: i, sheetRowIndex: i + 2, isClosed: isRowClosed });
+  var lastRow = sheet.getLastRow();
+  var values = [], formulas = [];
+  if (lastRow > 1) {
+    var range = sheet.getRange(2, 1, lastRow - 1, width);
+    values = range.getValues();
+    formulas = range.getFormulas();
   }
 
-  var updatedCount = 0;
-  var newCount = 0;
-  var newRows = [];
+  var uidMap = {};
+  values.forEach(function (r, i) {
+    var u = String(r[col.uid] || '').trim();
+    if (!u) return;
+    (uidMap[u] = uidMap[u] || []).push({ index: i, isClosed: isClosedRow(r, col) });
+  });
 
-  for (var k = 0; k < items.length; k++) {
-    var item = items[k];
+  var nowStr = nowString();
+  var updatedCount = 0, newCount = 0, newRows = [];
+
+  items.forEach(function (item) {
     var uid = String(item.uid || '').trim();
-    if (!uid) continue;
+    if (!uid) return;
+    var tag = item.statusTag === 'PENDING_CONFIRMATION' ? '待確認是否結案' : '正常追蹤';
+    var phone = normalizePhone(item.phone);
 
-    var existingEntries = uidMap[uid] || [];
-    var activeEntry = null;
-    for (var m = 0; m < existingEntries.length; m++) {
-      if (!existingEntries[m].isClosed) { activeEntry = existingEntries[m]; break; }
-    }
+    var active = (uidMap[uid] || []).filter(function (e) { return !e.isClosed; })[0];
 
-    var tagVal = item.statusTag === 'PENDING_CONFIRMATION' ? '待確認是否結案' : '正常追蹤';
-
-    if (activeEntry) {
-      var curRow = existingData[activeEntry.dataIndex];
+    if (active) {
+      var row = values[active.index];
       var changed = {};
-      var set = function (name, val) {
-        var c = col[name];
+      var set = function (key, val) {
+        var c = col[key];
         if (c === undefined || c === -1) return;
-        curRow[c] = val;
+        row[c] = val;
         changed[c] = true;
       };
-
-      if (item.name) set('NAME', item.name);
-      set('Outstanding Days', item.outstandingDays);
-      set('Total Outstanding Amount', item.totalOutstandingAmount);
-      if (item.email) set('Email', item.email);
-      if (item.phone) set('Phone', item.phone);
+      if (item.name) set('name', item.name);
+      set('outstandingDays', item.outstandingDays);
+      set('amount', item.totalOutstandingAmount);
+      if (item.email) set('email', item.email);
+      if (phone) set('phone', asText(phone));
       if (isValet) {
-        if (item.serviceType) set('Type of Service', item.serviceType);
-        if (item.address) set('地址', item.address);
+        if (item.serviceType) set('serviceType', item.serviceType);
+        if (item.address) set('address', item.address);
       }
-      set('追蹤標籤', item.statusTag === 'PENDING_CONFIRMATION' ? tagVal : (item.statusTag || '正常追蹤'));
-      if (item.stage) set('催帳階段/狀態', item.stage);
-      set('最後更新時間', nowStr);
+      set('statusTag', tag);
+      if (item.stage) set('stage', item.stage);
+      set('updatedAt', nowStr);
 
-      writeRow(sheet, activeEntry.sheetRowIndex, curRow, block.formulas[activeEntry.dataIndex], changed);
+      var out = row.map(function (v, c) {
+        if (!changed[c] && formulas[active.index] && formulas[active.index][c]) return formulas[active.index][c];
+        // 未變動的電話欄重新以文字寫回，避免被轉成數字
+        if (!changed[c] && c === col.phone && v !== '') return asText(normalizePhone(v));
+        return v;
+      });
+      sheet.getRange(active.index + 2, 1, 1, width).setValues([out]);
       updatedCount++;
     } else {
-      // 第一次欠款，或先前已結案又再欠款 -> 新增一列（不覆蓋歷史紀錄）
       var newRow = [];
       for (var w = 0; w < width; w++) newRow.push('');
-      var put = function (name, val) {
-        var c = col[name];
+      var put = function (key, val) {
+        var c = col[key];
         if (c === undefined || c === -1) return;
         newRow[c] = val;
       };
-      put('UID', item.uid);
-      put('NAME', item.name || '');
-      put('Outstanding Days', item.outstandingDays);
-      put('Total Outstanding Amount', item.totalOutstandingAmount);
-      put('Email', item.email || '');
-      put('Phone', item.phone || '');
+      put('uid', uid);
+      put('name', item.name || '');
+      put('outstandingDays', item.outstandingDays);
+      put('amount', item.totalOutstandingAmount);
+      put('email', item.email || '');
+      put('phone', asText(phone));
       if (isValet) {
-        put('Type of Service', item.serviceType || '');
-        put('地址', item.address || '');
+        put('serviceType', item.serviceType || '');
+        put('address', item.address || '');
       }
-      put('催帳階段/狀態', item.stage || 'STAGE_1');
-      put('追蹤標籤', tagVal);
-      put('結案狀態', '未結案');
-      put('最後更新時間', nowStr);
+      put('stage', item.stage || 'STAGE_1');
+      put('statusTag', tag);
+      put('isClosed', '未結案');
+      put('updatedAt', nowStr);
       newRows.push(newRow);
       newCount++;
     }
-  }
+  });
 
   if (newRows.length > 0) {
-    var startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, newRows.length, width).setValues(newRows);
+    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, width).setValues(newRows);
   }
 
-  return {
-    sheetName: sheetName,
-    updatedCount: updatedCount,
-    newCount: newCount,
-    totalItems: items.length
-  };
+  return { sheetName: sheetName, updatedCount: updatedCount, newCount: newCount, totalItems: items.length };
 }
 
-/**
- * 3. 前端單筆回寫 (當 2C/FA 在前端調整催帳狀態、備註或結案狀態時即時回寫)
- * 優先比對「尚未結案」的那一筆，以確保追蹤的是當前未結案案件！
- * 只寫入有變更的儲存格，且依試算表實際表頭定位欄位。
- */
+// ==============================================================================
+// 3. 前端單筆回寫
+// ==============================================================================
+
 function handleUpdateRowStatus(ss, businessUnit, uid, fields) {
-  var isValet = businessUnit === 'VALET';
-  var sheetName = isValet ? SHEET_NAMES.VALET_TRACKING : SHEET_NAMES.PEPPER_TRACKING;
-  var headers = isValet ? VALET_TRACKING_HEADERS : PEPPER_TRACKING_HEADERS;
+  var sheetName = trackingSheetName(businessUnit);
   var sheet = ss.getSheetByName(sheetName);
-  if (!sheet) {
-    throw new Error('找不到工作表: ' + sheetName);
-  }
-  if (sheet.getLastRow() <= 1) {
-    throw new Error('工作表目前無資料列');
-  }
+  if (!sheet) throw new Error('找不到工作表: ' + sheetName);
+  if (sheet.getLastRow() <= 1) throw new Error('工作表目前無資料列');
 
-  var cols = resolveColumns(sheet, headers);
-  var col = cols.map;
+  var cols = resolveColumns(sheet, businessUnit);
+  var col = cols.col;
+  if (col.uid === -1) throw new Error('工作表「' + sheetName + '」找不到 UID 欄位');
+
   var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, cols.width).getValues();
-  var colUid = col['UID'];
-  var colClosed = col['結案狀態'];
-
-  var targetRowIdx = -1;
-
-  // 優先找出該 UID 且「尚未結案」的列；若找不到則取最新的一列
+  var targetRow = -1;
   for (var i = data.length - 1; i >= 0; i--) {
-    var r = data[i];
-    if (String(r[colUid]).trim() === String(uid).trim()) {
-      var closedVal = String(r[colClosed] || '').trim();
-      var isClosed = closedVal === '已結案' || closedVal === '結案';
-      if (!isClosed) {
-        targetRowIdx = i + 2;
-        break;
-      }
-      if (targetRowIdx === -1) {
-        targetRowIdx = i + 2;
-      }
-    }
+    if (String(data[i][col.uid]).trim() !== String(uid).trim()) continue;
+    if (!isClosedRow(data[i], col)) { targetRow = i + 2; break; }
+    if (targetRow === -1) targetRow = i + 2; // 全部都已結案時取最新一列
   }
-
-  if (targetRowIdx === -1) {
+  if (targetRow === -1) {
     return { success: false, message: '在工作表中找不到 UID ' + uid + ' 的對應列' };
   }
 
-  var fieldMapping = {
-    stage: '催帳階段/狀態',
-    statusTag: '追蹤標籤',
-    isClosed: '結案狀態',
-    closedDate: '結案日期',
-    lineNoticeDate: 'Line通知日',
-    lineStatus: 'Line狀態',
-    emailNoticeDate: 'Email通知日',
-    emailStatus: 'Email狀態',
-    phoneNoticeDate: '電話通知日',
-    phoneStatus: '電話狀態',
-    twoCNotes: '2C催帳備註',
-    demandNoticeDate: '催告通知日',
-    demandDueDate: '催告到期日',
-    demandDocUrl: '催告文件連結',
-    terminationNoticeDate: '終止函日期',
-    terminationDocUrl: '終止函文件連結',
-    faNotes: 'FA備註'
-  };
-  var dateFields = {
-    closedDate: true, lineNoticeDate: true, emailNoticeDate: true, phoneNoticeDate: true,
-    demandNoticeDate: true, demandDueDate: true, terminationNoticeDate: true
-  };
-
-  var written = [];
+  var written = [], skipped = [];
   for (var key in fields) {
-    if (!fields.hasOwnProperty(key) || !fieldMapping[key]) continue;
-    var headerName = fieldMapping[key];
-    var colIdx = col[headerName];
-    if (colIdx === undefined || colIdx === -1) continue;
+    if (!fields.hasOwnProperty(key)) continue;
+    var spec = specOf(key);
+    if (!spec.key || key === 'uid') continue;
+
+    var c = ensureColumn(sheet, cols, key);
+    if (c === -1) { skipped.push(key); continue; }
 
     var val = fields[key];
     if (key === 'isClosed') {
       val = val ? '已結案' : '未結案';
     } else if (key === 'statusTag') {
-      val = val === 'PENDING_CONFIRMATION' ? '待確認是否結案' : (val === 'NORMAL' ? '正常追蹤' : val);
+      val = val === 'PENDING_CONFIRMATION' ? '待確認是否結案' : (val === 'NORMAL' ? '正常追蹤' : (val || ''));
     } else if (val === null || val === undefined) {
       val = '';
-    } else if (dateFields[key]) {
+    } else if (spec.date) {
       val = normalizeDateValue(val);
+    } else if (key === 'demandMethod') {
+      val = val === 'EMAIL' ? 'Email' : (val === 'CERTIFIED_LETTER' ? '存證信函' : val);
     }
+    if (spec.text) val = asText(val);
 
-    // 逐格寫入：只動這個欄位，不會影響同列其他欄
-    sheet.getRange(targetRowIdx, colIdx + 1).setValue(val);
-    written.push(headerName);
+    sheet.getRange(targetRow, c + 1).setValue(val);
+    written.push(cols.headers[c] + '(' + columnLetter(c + 1) + ')');
   }
 
-  var colUpdatedAt = col['最後更新時間'];
-  if (colUpdatedAt !== undefined && colUpdatedAt !== -1) {
-    sheet.getRange(targetRowIdx, colUpdatedAt + 1)
-      .setValue(Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss'));
+  if (col.updatedAt !== -1) {
+    sheet.getRange(targetRow, col.updatedAt + 1).setValue(nowString());
   }
 
   return {
     success: true,
     sheetName: sheetName,
-    rowIndex: targetRowIdx,
+    rowIndex: targetRow,
     uid: uid,
-    writtenColumns: written
+    writtenColumns: written,
+    skippedFields: skipped
   };
 }
 
-/**
- * 手動測試用：在 Apps Script 編輯器執行，檢查兩張追蹤表的欄位對應
- * （會自動補上缺少的欄位，並在執行記錄列出每個欄位對應到哪一欄）
- */
+// ==============================================================================
+// 4. 檔案上傳（電子催告檔 / 存證信函）
+// ==============================================================================
+
+function handleUploadFile(ss, payload) {
+  if (!payload.base64) throw new Error('未提供檔案內容');
+  var bytes = Utilities.base64Decode(payload.base64);
+  var name = [payload.businessUnit || '', payload.uid || '', payload.kind || '', payload.fileName || 'file']
+    .filter(function (s) { return s; }).join('_');
+  var blob = Utilities.newBlob(bytes, payload.mimeType || 'application/octet-stream', name);
+  var file = getUploadFolder(ss).createFile(blob);
+  return { url: file.getUrl(), id: file.getId(), name: file.getName() };
+}
+
+/** 試算表所在資料夾下的附件資料夾（檔案沿用該資料夾的共用權限） */
+function getUploadFolder(ss) {
+  var parents = DriveApp.getFileById(ss.getId()).getParents();
+  var parent = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
+  var it = parent.getFoldersByName(UPLOAD_FOLDER_NAME);
+  return it.hasNext() ? it.next() : parent.createFolder(UPLOAD_FOLDER_NAME);
+}
+
+// ==============================================================================
+// 手動檢查：在 Apps Script 編輯器執行，於「執行記錄」查看每個欄位對應到哪一欄
+// ==============================================================================
+
 function checkColumnMapping() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  [[SHEET_NAMES.VALET_TRACKING, VALET_TRACKING_HEADERS],
-   [SHEET_NAMES.PEPPER_TRACKING, PEPPER_TRACKING_HEADERS]].forEach(function (pair) {
-    var sheet = ss.getSheetByName(pair[0]);
-    if (!sheet) { Logger.log('找不到工作表: ' + pair[0]); return; }
-    var map = resolveColumns(sheet, pair[1]).map;
-    Logger.log('== ' + pair[0] + ' ==');
-    pair[1].forEach(function (h) {
-      var c = map[h];
-      Logger.log(h + ' -> ' + (c === -1 ? '(無)' : columnLetter(c + 1)));
+  ['VALET', 'PEPPER'].forEach(function (bu) {
+    var name = trackingSheetName(bu);
+    var sheet = ss.getSheetByName(name);
+    if (!sheet) { Logger.log('找不到工作表: ' + name); return; }
+    var cols = resolveColumns(sheet, bu);
+    Logger.log('== ' + name + ' ==');
+    specsFor(bu).forEach(function (s) {
+      var c = cols.col[s.key];
+      Logger.log(s.names[0] + ' -> ' + (c === -1 ? '(試算表沒有此欄' + (s.append ? '，第一次回寫時會自動新增)' : ')') : columnLetter(c + 1) + ' 欄「' + cols.headers[c] + '」'));
     });
   });
 }
