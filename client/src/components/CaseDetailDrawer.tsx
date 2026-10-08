@@ -225,7 +225,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
     accent: 'amber' | 'violet'
   ) => (
     <div>
-      <label className="block text-xs font-medium text-slate-700 mb-1">{label}</label>
+      <label className="block text-xs font-medium text-ink-700 mb-1">{label}</label>
       <div className="flex flex-wrap gap-2">
         <input
           type="url"
@@ -233,7 +233,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
           placeholder="上傳檔案，或貼上 Google 雲端連結"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          className="flex-1 min-w-0 text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-slate-100 font-mono"
+          className="flex-1 min-w-0 text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100 font-mono"
         />
         {isFATeam && (
           <label
@@ -261,7 +261,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
             href={url}
             target="_blank"
             rel="noreferrer"
-            className="px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition-colors"
+            className="px-3 py-2 text-xs font-semibold text-ink-700 bg-ink-100 hover:bg-ink-200 rounded-lg flex items-center gap-1 transition-colors"
           >
             <ExternalLink className="w-3.5 h-3.5" />
             開啟
@@ -272,36 +272,36 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   );
 
   const dateInputCls =
-    'w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-slate-100';
+    'w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100';
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-xs flex justify-end animate-fade-in">
-      <div className="w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col border-l border-slate-200">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-ink-950/45 backdrop-blur-xs flex justify-end animate-fade-in">
+      <div className="w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col border-l border-ink-200">
         {/* Drawer Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
+        <div className="px-6 py-4 border-b border-ink-200 flex items-center justify-between bg-ink-50/80">
           <div>
             <div className="flex items-center gap-2">
               <span
                 className={`px-2 py-0.5 rounded text-xs font-bold ${
                   caseData?.businessUnit === 'VALET'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-emerald-100 text-emerald-700'
+                    ? 'bg-valet-100 text-valet-700'
+                    : 'bg-pepper-100 text-pepper-700'
                 }`}
               >
                 {caseData?.businessUnit}
               </span>
-              <h2 className="text-lg font-bold text-slate-900">
+              <h2 className="text-lg font-bold text-ink-900">
                 {caseData?.name || '載入中...'}
               </h2>
-              <span className="text-xs font-mono text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded">
+              <span className="text-xs font-mono text-ink-500 bg-ink-200/70 px-2 py-0.5 rounded">
                 UID: {caseData?.uid}
               </span>
             </div>
-            <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
+            <div className="mt-1 flex items-center gap-3 text-xs text-ink-500">
               {caseData && (
                 <>
                   <StatusBadge stage={caseData.stage} isClosed={caseData.isClosed} />
-                  <span>逾期天數: <strong className="text-slate-800">{caseData.outstandingDays} 天</strong></span>
+                  <span>逾期天數: <strong className="text-ink-800">{caseData.outstandingDays} 天</strong></span>
                   <span>欠款金額: <strong className="text-red-600 font-semibold">${caseData.outstandingAmount.toLocaleString()}</strong></span>
                 </>
               )}
@@ -309,7 +309,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 transition-colors"
+            className="p-2 rounded-xl text-ink-400 hover:text-ink-600 hover:bg-ink-200/50 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -318,8 +318,8 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
         {/* Drawer Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {isLoading && (
-            <div className="py-20 flex flex-col items-center justify-center text-slate-400">
-              <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mb-2" />
+            <div className="py-20 flex flex-col items-center justify-center text-ink-400">
+              <Loader2 className="w-8 h-8 animate-spin text-brand-600 mb-2" />
               <p className="text-sm">載入案件資料中...</p>
             </div>
           )}
@@ -328,12 +328,12 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
             <div
               className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
                 feedbackMsg.type === 'success'
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  ? 'bg-brand-50 text-brand-700 border-brand-200'
                   : 'bg-red-50 text-red-700 border-red-200'
               }`}
             >
               {feedbackMsg.type === 'success' ? (
-                <CheckCircle className="w-4 h-4 text-emerald-600" />
+                <CheckCircle className="w-4 h-4 text-brand-600" />
               ) : (
                 <AlertTriangle className="w-4 h-4 text-red-600" />
               )}
@@ -387,18 +387,18 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
               )}
 
               {/* Section 1: Customer Info Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-ink-50 p-4 rounded-xl border border-ink-200/80">
                 <div>
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">聯絡電話</span>
-                  <span className="text-xs font-medium text-slate-800 flex items-center gap-1 mt-0.5">
-                    <Phone className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">聯絡電話</span>
+                  <span className="text-xs font-medium text-ink-800 flex items-center gap-1 mt-0.5">
+                    <Phone className="w-3.5 h-3.5 text-ink-400" />
                     {caseData.phone || '無電話紀錄'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">電子信箱</span>
-                  <span className="text-xs font-medium text-slate-800 flex items-center gap-1 mt-0.5 truncate">
-                    <Mail className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">電子信箱</span>
+                  <span className="text-xs font-medium text-ink-800 flex items-center gap-1 mt-0.5 truncate">
+                    <Mail className="w-3.5 h-3.5 text-ink-400" />
                     {caseData.email || '無 Email'}
                   </span>
                 </div>
@@ -406,8 +406,8 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                 {/* Valet 專屬：服務類型 (Type of Service) */}
                 {caseData.businessUnit === 'VALET' && (
                   <div>
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">服務類型 (Service)</span>
-                    <span className="text-xs font-medium text-slate-800 mt-0.5 block truncate">
+                    <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">服務類型 (Service)</span>
+                    <span className="text-xs font-medium text-ink-800 mt-0.5 block truncate">
                       {caseData.serviceType || '一般倉儲'}
                     </span>
                   </div>
@@ -416,64 +416,64 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                 {/* Valet 專屬：地址 (Address) */}
                 {caseData.businessUnit === 'VALET' && (
                   <div className="sm:col-span-2">
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">地址 (Address)</span>
-                    <span className="text-xs font-medium text-slate-800 mt-0.5 block truncate" title={caseData.address || ''}>
+                    <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">地址 (Address)</span>
+                    <span className="text-xs font-medium text-ink-800 mt-0.5 block truncate" title={caseData.address || ''}>
                       {caseData.address || '未提供地址'}
                     </span>
                   </div>
                 )}
 
                 <div>
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">帳單/應繳日</span>
-                  <span className="text-xs font-medium text-slate-800 flex items-center gap-1 mt-0.5">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">帳單/應繳日</span>
+                  <span className="text-xs font-medium text-ink-800 flex items-center gap-1 mt-0.5">
+                    <Calendar className="w-3.5 h-3.5 text-ink-400" />
                     {caseData.billDate ? format(new Date(caseData.billDate), 'yyyy-MM-dd') : '未提供'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">催帳開始日</span>
-                  <span className="text-xs font-medium text-indigo-700 flex items-center gap-1 mt-0.5">
-                    <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                  <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">催帳開始日</span>
+                  <span className="text-xs font-medium text-brand-700 flex items-center gap-1 mt-0.5">
+                    <Clock className="w-3.5 h-3.5 text-brand-500" />
                     {caseData.collectionStartDate ? format(new Date(caseData.collectionStartDate), 'yyyy-MM-dd') : '尚未啟動'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">最後報表匯入</span>
-                  <span className="text-xs font-medium text-slate-600 mt-0.5 block">
+                  <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">最後報表匯入</span>
+                  <span className="text-xs font-medium text-ink-600 mt-0.5 block">
                     {format(new Date(caseData.lastImportedAt), 'yyyy-MM-dd HH:mm')}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">結案狀態</span>
-                  <span className="text-xs font-medium text-slate-800 mt-0.5 block">
+                  <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">結案狀態</span>
+                  <span className="text-xs font-medium text-ink-800 mt-0.5 block">
                     {caseData.isClosed ? `已結案 (${caseData.closedDate ? format(new Date(caseData.closedDate), 'yyyy-MM-dd') : ''})` : '未結案進行中'}
                   </span>
                 </div>
               </div>
 
               {/* Section 2: 2C Team Collection Section */}
-              <form onSubmit={handleSave2C} className="bg-white p-5 rounded-2xl border border-indigo-100 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-indigo-50 pb-3">
+              <form onSubmit={handleSave2C} className="bg-white p-5 rounded-2xl border border-brand-100 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-brand-50 pb-3">
                   <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+                    <div className="p-1.5 rounded-lg bg-brand-50 text-brand-600">
                       <MessageSquare className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900">2C Team 催帳作業 (勸導期)</h3>
-                      <p className="text-[11px] text-slate-500">
-                        主要管道：<strong className="text-indigo-600">Line</strong> ➜ 未聯繫到依序以 <strong>Email</strong> ➜ <strong>簡訊</strong> ➜ <strong>電話</strong> 通知
+                      <h3 className="text-sm font-bold text-ink-900">2C Team 催帳作業 (勸導期)</h3>
+                      <p className="text-[11px] text-ink-500">
+                        主要管道：<strong className="text-brand-600">Line</strong> ➜ 未聯繫到依序以 <strong>Email</strong> ➜ <strong>簡訊</strong> ➜ <strong>電話</strong> 通知
                       </p>
                     </div>
                   </div>
                   {!is2CTeam && (
-                    <span className="text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded">唯讀檢視</span>
+                    <span className="text-[11px] text-ink-400 bg-ink-100 px-2 py-0.5 rounded">唯讀檢視</span>
                   )}
                 </div>
 
                 {/* 通知日期：Line ➜ Email ➜ 簡訊 ➜ 電話 */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-indigo-50/40 p-3 rounded-xl border border-indigo-100/60">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-brand-50/40 p-3 rounded-xl border border-brand-100/60">
                   <div>
-                    <label className="block text-xs font-semibold text-indigo-950 mb-1">
+                    <label className="block text-xs font-semibold text-brand-950 mb-1">
                       🟢 Line 通知日期 (主要通知)
                     </label>
                     <input
@@ -481,11 +481,11 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       disabled={!is2CTeam}
                       value={lineNoticeDate}
                       onChange={(e) => setLineNoticeDate(e.target.value)}
-                      className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100"
+                      className="w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-ink-700 mb-1">
                       📧 Email 通知日期
                     </label>
                     <input
@@ -493,11 +493,11 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       disabled={!is2CTeam}
                       value={emailNoticeDate}
                       onChange={(e) => setEmailNoticeDate(e.target.value)}
-                      className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100"
+                      className="w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-ink-700 mb-1">
                       💬 簡訊通知日期
                     </label>
                     <input
@@ -505,11 +505,11 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       disabled={!is2CTeam}
                       value={smsNoticeDate}
                       onChange={(e) => setSmsNoticeDate(e.target.value)}
-                      className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100"
+                      className="w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label className="block text-xs font-medium text-ink-700 mb-1">
                       📞 電話通知日期
                     </label>
                     <input
@@ -517,15 +517,15 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       disabled={!is2CTeam}
                       value={phoneNoticeDate}
                       onChange={(e) => setPhoneNoticeDate(e.target.value)}
-                      className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100"
+                      className="w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100"
                     />
                   </div>
                 </div>
 
                 {/* 2C Notes */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
-                    2C 催帳詳細備註 <span className="text-slate-400 font-normal">(處理方式/客人回應)</span>
+                  <label className="block text-xs font-medium text-ink-700 mb-1">
+                    2C 催帳詳細備註 <span className="text-ink-400 font-normal">(處理方式/客人回應)</span>
                   </label>
                   <textarea
                     rows={2}
@@ -533,7 +533,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     placeholder="填寫客戶狀況、還款承諾或轉交 FA 注意事項..."
                     value={twoCNotes}
                     onChange={(e) => setTwoCNotes(e.target.value)}
-                    className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100"
+                    className="w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100"
                   />
                 </div>
 
@@ -542,7 +542,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     <button
                       type="submit"
                       disabled={isSaving2C}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all shadow-xs disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-xl transition-all shadow-xs disabled:opacity-50"
                     >
                       {isSaving2C ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                       儲存 2C 催帳紀錄
@@ -552,21 +552,21 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
               </form>
 
               {/* Section 3: FA Team Legal & Demand Section */}
-              <form onSubmit={handleSaveFA} className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-emerald-50 pb-3">
+              <form onSubmit={handleSaveFA} className="bg-white p-5 rounded-2xl border border-brand-100 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-brand-50 pb-3">
                   <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
+                    <div className="p-1.5 rounded-lg bg-brand-50 text-brand-600">
                       <ShieldAlert className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900">催告與終止作業</h3>
-                      <p className="text-[11px] text-slate-500">
+                      <h3 className="text-sm font-bold text-ink-900">催告與終止作業</h3>
+                      <p className="text-[11px] text-ink-500">
                         滿 50 天：<strong>催告期</strong> ➜ 滿 80 天：<strong>終止期</strong> ➜ 終止函 15 天未結案/滿95天：<strong>待 write-off</strong>
                       </p>
                     </div>
                   </div>
                   {!isFATeam && (
-                    <span className="text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded">唯讀檢視</span>
+                    <span className="text-[11px] text-ink-400 bg-ink-100 px-2 py-0.5 rounded">唯讀檢視</span>
                   )}
                 </div>
 
@@ -585,7 +585,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">催告方式</label>
+                      <label className="block text-xs font-medium text-ink-700 mb-1">催告方式</label>
                       <select
                         disabled={!isFATeam}
                         value={demandMethod}
@@ -598,7 +598,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">電子催告簡訊日期</label>
+                      <label className="block text-xs font-medium text-ink-700 mb-1">電子催告簡訊日期</label>
                       <input
                         type="date"
                         disabled={!isFATeam}
@@ -608,7 +608,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">催告日期</label>
+                      <label className="block text-xs font-medium text-ink-700 mb-1">催告日期</label>
                       <input
                         type="date"
                         disabled={!isFATeam}
@@ -618,7 +618,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">催告到期日</label>
+                      <label className="block text-xs font-medium text-ink-700 mb-1">催告到期日</label>
                       <input
                         type="date"
                         disabled={!isFATeam}
@@ -647,7 +647,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">終止簡訊通知</label>
+                      <label className="block text-xs font-medium text-ink-700 mb-1">終止簡訊通知</label>
                       <input
                         type="date"
                         disabled={!isFATeam}
@@ -657,7 +657,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">終止函發送日期</label>
+                      <label className="block text-xs font-medium text-ink-700 mb-1">終止函發送日期</label>
                       <input
                         type="date"
                         disabled={!isFATeam}
@@ -667,7 +667,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">到期日期</label>
+                      <label className="block text-xs font-medium text-ink-700 mb-1">到期日期</label>
                       <input
                         type="date"
                         disabled={!isFATeam}
@@ -682,7 +682,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
 
                 {/* FA Notes */}
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label className="block text-xs font-medium text-ink-700 mb-1">
                     FA 法務/財務備註
                   </label>
                   <textarea
@@ -691,7 +691,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     placeholder="存證信函編號、法院支付命令進度或呆帳沖銷評估..."
                     value={faNotes}
                     onChange={(e) => setFaNotes(e.target.value)}
-                    className="w-full text-xs rounded-lg border-slate-300 bg-white px-3 py-2 border shadow-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-slate-100"
+                    className="w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100"
                   />
                 </div>
 
@@ -703,7 +703,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">發送日期</label>
+                      <label className="block text-xs font-medium text-ink-700 mb-1">發送日期</label>
                       <input
                         type="date"
                         disabled={!isFATeam}
@@ -713,7 +713,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">收件日期</label>
+                      <label className="block text-xs font-medium text-ink-700 mb-1">收件日期</label>
                       <input
                         type="date"
                         disabled={!isFATeam}
@@ -730,7 +730,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     <button
                       type="submit"
                       disabled={isSavingFA}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 rounded-xl transition-all shadow-xs disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-xl transition-all shadow-xs disabled:opacity-50"
                     >
                       {isSavingFA ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                       儲存催告與終止紀錄
@@ -740,13 +740,13 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
               </form>
 
               {/* Section 4: Case Closure */}
-              <form onSubmit={handleSaveClose} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+              <form onSubmit={handleSaveClose} className="bg-ink-50 p-4 rounded-2xl border border-ink-200 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <CheckCircle className={`w-5 h-5 ${isClosed ? 'text-emerald-600' : 'text-slate-400'}`} />
+                    <CheckCircle className={`w-5 h-5 ${isClosed ? 'text-brand-600' : 'text-ink-400'}`} />
                     <div>
-                      <h4 className="text-xs font-bold text-slate-900">結案狀態設定</h4>
-                      <p className="text-[11px] text-slate-500">客戶繳清款項或完成沖銷時結案</p>
+                      <h4 className="text-xs font-bold text-ink-900">結案狀態設定</h4>
+                      <p className="text-[11px] text-ink-500">客戶繳清款項或完成沖銷時結案</p>
                     </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -756,12 +756,12 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       onChange={(e) => setIsClosed(e.target.checked)}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    <div className="w-11 h-6 bg-ink-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-ink-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
                   </label>
                 </div>
 
                 {isClosed && (
-                  <div className="pt-2 border-t border-slate-200/80 flex items-center gap-2 text-xs text-slate-700">
+                  <div className="pt-2 border-t border-ink-200/80 flex items-center gap-2 text-xs text-ink-700">
                     <span className="font-medium">結案日期:</span>
                     <span className="font-mono">
                       {caseData.isClosed && closedDate ? closedDate : `${todayStr()}（儲存時自動帶入當天）`}
@@ -773,7 +773,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                   <button
                     type="submit"
                     disabled={isSavingClose}
-                    className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl transition-colors disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-ink-700 bg-white hover:bg-ink-100 border border-ink-300 rounded-xl transition-colors disabled:opacity-50"
                   >
                     {isSavingClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                     更新結案狀態
@@ -783,20 +783,20 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
 
               {/* Section 5: Audit Logs */}
               {caseData.auditLogs && caseData.auditLogs.length > 0 && (
-                <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 space-y-2">
-                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <History className="w-4 h-4 text-slate-500" />
+                <div className="bg-ink-50/70 p-4 rounded-2xl border border-ink-200/80 space-y-2">
+                  <h4 className="text-xs font-bold text-ink-800 flex items-center gap-1.5">
+                    <History className="w-4 h-4 text-ink-500" />
                     操作異動歷程 ({caseData.auditLogs.length})
                   </h4>
-                  <div className="divide-y divide-slate-200/60 max-h-40 overflow-y-auto pr-1 text-xs text-slate-600 space-y-2">
+                  <div className="divide-y divide-ink-200/60 max-h-40 overflow-y-auto pr-1 text-xs text-ink-600 space-y-2">
                     {caseData.auditLogs.map((log) => (
                       <div key={log.id} className="pt-2 first:pt-0 flex items-start justify-between">
                         <div>
-                          <span className="font-semibold text-slate-800">{log.user?.name || '使用者'}</span>
-                          <span className="text-slate-400 text-[10px] ml-1.5">({log.action})</span>
-                          <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{log.details}</p>
+                          <span className="font-semibold text-ink-800">{log.user?.name || '使用者'}</span>
+                          <span className="text-ink-400 text-[10px] ml-1.5">({log.action})</span>
+                          <p className="text-[11px] text-ink-500 mt-0.5 line-clamp-2">{log.details}</p>
                         </div>
-                        <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                        <span className="text-[10px] text-ink-400 whitespace-nowrap">
                           {format(new Date(log.createdAt), 'MM/dd HH:mm')}
                         </span>
                       </div>

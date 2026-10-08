@@ -24,13 +24,13 @@ export const Navbar: React.FC<NavbarProps> = ({
     switch (role) {
       case 'TWO_C_TEAM':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200">
             2C Team 催帳
           </span>
         );
       case 'FA_TEAM':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
             FA 財務法務
           </span>
         );
@@ -42,7 +42,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         );
       default:
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-600">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-ink-100 text-ink-600">
             訪客唯讀
           </span>
         );
@@ -50,36 +50,36 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
+    <header className="sticky top-0 z-40 bg-white/85 backdrop-blur-md border-b border-ink-200/80 shadow-[0_1px_0_0_rgba(16,24,23,0.02)] before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-gradient-to-r before:from-brand-300 before:via-brand-400 before:to-brand-600">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 gap-4">
           {/* Logo and Brand */}
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-slate-900 to-indigo-700 text-white flex items-center justify-center font-black text-lg shadow-sm">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-white flex items-center justify-center font-black text-lg tracking-tight shadow-md shadow-brand-600/25 ring-1 ring-inset ring-white/20">
                 ZP
               </div>
               <div>
-                <h1 className="text-base font-bold text-slate-900 leading-tight">
+                <h1 className="text-base font-bold text-ink-900 leading-tight">
                   呆帳催款追蹤系統
                 </h1>
-                <p className="text-xs text-slate-400 font-medium">
+                <p className="text-xs text-ink-400 font-medium">
                   2C Team & FA 協同作業平台
                 </p>
               </div>
             </div>
 
             {/* Navigation Tabs */}
-            <nav className="hidden md:flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl">
+            <nav className="hidden md:flex items-center gap-1 bg-ink-100/70 p-1 rounded-xl ring-1 ring-inset ring-ink-200/60">
               <button
                 onClick={() => setActiveTab('dashboard')}
                 className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
                   activeTab === 'dashboard'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white text-brand-800 shadow-sm ring-1 ring-ink-200/70'
+                    : 'text-ink-500 hover:text-ink-900 hover:bg-white/60'
                 }`}
               >
-                <LayoutDashboard className="w-4 h-4 text-indigo-600" />
+                <LayoutDashboard className={`w-4 h-4 ${activeTab === 'dashboard' ? 'text-brand-500' : 'text-ink-400'}`} />
                 總覽看板
               </button>
 
@@ -87,11 +87,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => setActiveTab('cases')}
                 className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
                   activeTab === 'cases'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white text-brand-800 shadow-sm ring-1 ring-ink-200/70'
+                    : 'text-ink-500 hover:text-ink-900 hover:bg-white/60'
                 }`}
               >
-                <Users className="w-4 h-4 text-indigo-600" />
+                <Users className={`w-4 h-4 ${activeTab === 'cases' ? 'text-brand-500' : 'text-ink-400'}`} />
                 案件清單
               </button>
             </nav>
@@ -100,13 +100,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Business Unit Switcher & Actions */}
           <div className="flex items-center gap-3">
             {/* Valet / Pepper Segmented Switcher */}
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/60">
+            <div className="flex items-center bg-ink-100 p-1 rounded-xl border border-ink-200/60">
               <button
                 onClick={() => onBusinessUnitChange('VALET')}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                   currentBusinessUnit === 'VALET'
-                    ? 'bg-red-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-valet-600 text-white shadow-xs'
+                    : 'text-ink-600 hover:text-ink-900'
                 }`}
               >
                 <span className="w-2 h-2 rounded-full bg-white opacity-80"></span>
@@ -116,8 +116,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => onBusinessUnitChange('PEPPER')}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                   currentBusinessUnit === 'PEPPER'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-pepper-600 text-white shadow-xs'
+                    : 'text-ink-600 hover:text-ink-900'
                 }`}
               >
                 <span className="w-2 h-2 rounded-full bg-white opacity-80"></span>
@@ -129,7 +129,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {is2CTeam && (
               <button
                 onClick={onOpenUpload}
-                className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all shadow-xs"
+                className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-xl transition-all shadow-sm shadow-brand-700/20"
               >
                 <Upload className="w-3.5 h-3.5" />
                 上傳週報
@@ -137,25 +137,25 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
 
             {/* User Profile & Logout */}
-            <div className="flex items-center gap-2.5 pl-2 border-l border-slate-200">
+            <div className="flex items-center gap-2.5 pl-2 border-l border-ink-200">
               <div className="text-right hidden lg:block">
-                <div className="text-xs font-bold text-slate-800 flex items-center justify-end gap-1.5">
+                <div className="text-xs font-bold text-ink-800 flex items-center justify-end gap-1.5">
                   {user?.name || '使用者'}
                   {getRoleBadge(user?.role)}
                 </div>
-                <div className="text-[11px] text-slate-400 font-mono">
+                <div className="text-[11px] text-ink-400 font-mono">
                   {user?.email}
                 </div>
               </div>
 
-              <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs border border-slate-300">
+              <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-800 flex items-center justify-center font-bold text-xs ring-2 ring-white shadow-sm">
                 {user?.name?.charAt(0) || <UserIcon className="w-4 h-4" />}
               </div>
 
               <button
                 onClick={logout}
                 title="登出系統"
-                className="p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                className="p-2 rounded-xl text-ink-400 hover:text-red-600 hover:bg-red-50 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
               </button>

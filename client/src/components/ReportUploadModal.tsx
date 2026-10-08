@@ -89,22 +89,22 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-950/45 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-ink-100 overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="px-6 py-4 border-b border-ink-100 flex items-center justify-between bg-ink-50/50">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+            <div className="p-2 rounded-lg bg-brand-50 text-brand-600">
               <Upload className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-800">上傳每週 Outstanding Report</h3>
-              <p className="text-xs text-slate-500">支援 Excel (.xlsx, .xls) 及 CSV 檔案</p>
+              <h3 className="text-lg font-bold text-ink-800">上傳每週 Outstanding Report</h3>
+              <p className="text-xs text-ink-500">支援 Excel (.xlsx, .xls) 及 CSV 檔案</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-lg text-ink-400 hover:text-ink-600 hover:bg-ink-100 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -113,7 +113,7 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Business Unit Selector */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-ink-700 uppercase tracking-wider mb-2">
               選擇事業體 (Business Unit)
             </label>
             <div className="grid grid-cols-2 gap-3">
@@ -125,11 +125,11 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
                 }}
                 className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border text-sm font-semibold transition-all ${
                   businessUnit === 'VALET'
-                    ? 'border-red-500 bg-red-50/80 text-red-700 shadow-sm ring-2 ring-red-500/20'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    ? 'border-valet-500 bg-valet-50/80 text-valet-700 shadow-sm ring-2 ring-valet-500/20'
+                    : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'
                 }`}
               >
-                <span className={`w-2.5 h-2.5 rounded-full ${businessUnit === 'VALET' ? 'bg-red-500' : 'bg-slate-300'}`}></span>
+                <span className={`w-2.5 h-2.5 rounded-full ${businessUnit === 'VALET' ? 'bg-valet-500' : 'bg-ink-300'}`}></span>
                 Valet
               </button>
 
@@ -141,11 +141,11 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
                 }}
                 className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border text-sm font-semibold transition-all ${
                   businessUnit === 'PEPPER'
-                    ? 'border-emerald-500 bg-emerald-50/80 text-emerald-700 shadow-sm ring-2 ring-emerald-500/20'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    ? 'border-pepper-500 bg-pepper-50/80 text-pepper-700 shadow-sm ring-2 ring-pepper-500/20'
+                    : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'
                 }`}
               >
-                <span className={`w-2.5 h-2.5 rounded-full ${businessUnit === 'PEPPER' ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                <span className={`w-2.5 h-2.5 rounded-full ${businessUnit === 'PEPPER' ? 'bg-pepper-500' : 'bg-ink-300'}`}></span>
                 Pepper
               </button>
             </div>
@@ -160,8 +160,8 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
                 onClick={() => fileInputRef.current?.click()}
                 className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-colors ${
                   selectedFile
-                    ? 'border-indigo-400 bg-indigo-50/30'
-                    : 'border-slate-300 hover:border-indigo-400 hover:bg-slate-50/50'
+                    ? 'border-brand-400 bg-brand-50/30'
+                    : 'border-ink-300 hover:border-brand-400 hover:bg-ink-50/50'
                 }`}
               >
                 <input
@@ -174,17 +174,17 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
 
                 {selectedFile ? (
                   <div className="flex items-center justify-center gap-3">
-                    <FileSpreadsheet className="w-8 h-8 text-indigo-600 flex-shrink-0" />
+                    <FileSpreadsheet className="w-8 h-8 text-brand-600 flex-shrink-0" />
                     <div className="text-left">
-                      <p className="text-sm font-medium text-slate-800 truncate max-w-xs">{selectedFile.name}</p>
-                      <p className="text-xs text-slate-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                      <p className="text-sm font-medium text-ink-800 truncate max-w-xs">{selectedFile.name}</p>
+                      <p className="text-xs text-ink-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                     </div>
                   </div>
                 ) : (
                   <div>
-                    <FileSpreadsheet className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-slate-700">拖曳檔案至此或點擊瀏覽</p>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <FileSpreadsheet className="w-10 h-10 text-ink-400 mx-auto mb-2" />
+                    <p className="text-sm font-medium text-ink-700">拖曳檔案至此或點擊瀏覽</p>
+                    <p className="text-xs text-ink-500 mt-1">
                       支援 .xlsx, .csv 檔案（必須包含 UID 與 逾期天數/金額 欄位）
                     </p>
                   </div>
@@ -195,7 +195,7 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
                 <button
                   type="button"
                   onClick={handleDownloadSample}
-                  className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                  className="inline-flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-800 font-medium"
                 >
                   <Download className="w-3.5 h-3.5" />
                   下載標準格式範本
@@ -204,7 +204,7 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
                   <button
                     type="button"
                     onClick={handleReset}
-                    className="text-xs text-slate-500 hover:text-slate-700"
+                    className="text-xs text-ink-500 hover:text-ink-700"
                   >
                     清除選擇
                   </button>
@@ -226,26 +226,26 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
 
           {/* Success summary */}
           {result && (
-            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-3">
-              <div className="flex items-center gap-2 text-emerald-800 font-semibold">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
+            <div className="p-4 rounded-xl bg-brand-50 border border-brand-200 space-y-3">
+              <div className="flex items-center gap-2 text-brand-800 font-semibold">
+                <CheckCircle className="w-5 h-5 text-brand-600" />
                 <span>{result.message}</span>
               </div>
-              <p className="text-xs text-emerald-700">
+              <p className="text-xs text-brand-700">
                 ✨ 系統已完成人名/UID 金額加總彙整，並自動非同步回寫 Google 試算表（2bad-debtbackup）對應原始與追蹤分頁。
               </p>
               <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                <div className="bg-white/80 p-2 rounded-lg border border-emerald-100">
-                  <span className="text-slate-500 block">總解析筆數</span>
-                  <span className="font-bold text-slate-800 text-base">{result.result.totalCount}</span>
+                <div className="bg-white/80 p-2 rounded-lg border border-brand-100">
+                  <span className="text-ink-500 block">總解析筆數</span>
+                  <span className="font-bold text-ink-800 text-base">{result.result.totalCount}</span>
                 </div>
-                <div className="bg-white/80 p-2 rounded-lg border border-emerald-100">
-                  <span className="text-emerald-600 block">新進案件</span>
-                  <span className="font-bold text-emerald-700 text-base">{result.result.newCount}</span>
+                <div className="bg-white/80 p-2 rounded-lg border border-brand-100">
+                  <span className="text-brand-600 block">新進案件</span>
+                  <span className="font-bold text-brand-700 text-base">{result.result.newCount}</span>
                 </div>
-                <div className="bg-white/80 p-2 rounded-lg border border-emerald-100">
-                  <span className="text-indigo-600 block">更新既有案件</span>
-                  <span className="font-bold text-indigo-700 text-base">{result.result.updatedCount}</span>
+                <div className="bg-white/80 p-2 rounded-lg border border-brand-100">
+                  <span className="text-brand-600 block">更新既有案件</span>
+                  <span className="font-bold text-brand-700 text-base">{result.result.updatedCount}</span>
                 </div>
                 <div className="bg-white/80 p-2 rounded-lg border border-amber-200 bg-amber-50/50">
                   <span className="text-amber-700 block font-medium">待確認結案</span>
@@ -270,7 +270,7 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+              className="px-4 py-2 text-sm font-medium text-ink-600 hover:text-ink-800 hover:bg-ink-100 rounded-xl transition-colors"
             >
               {result ? '完成並關閉' : '取消'}
             </button>
@@ -278,7 +278,7 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
               <button
                 type="submit"
                 disabled={!selectedFile || isUploading}
-                className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-xl transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isUploading ? (
                   <>
@@ -297,7 +297,7 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
               <button
                 type="button"
                 onClick={handleReset}
-                className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl"
+                className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-xl"
               >
                 再上傳一筆
               </button>
