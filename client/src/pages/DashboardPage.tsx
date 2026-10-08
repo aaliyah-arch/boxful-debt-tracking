@@ -96,7 +96,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-2 sm:grid-cols-5 [&>*:last-child]:col-span-2 sm:[&>*:last-child]:col-span-1 gap-px bg-ink-200 border-t border-ink-200">
+        <div className="mt-6 grid grid-cols-2 lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1 gap-px bg-ink-200 border-t border-ink-200">
           {LADDER.map((s) => {
             const b = breakdown[s.code] ?? { count: 0, amount: 0 };
             const empty = b.count === 0;
@@ -108,7 +108,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               >
                 <div className="flex items-center gap-2">
                   <span className={`w-2.5 h-2.5 rounded-[3px] ${s.dot}`} />
-                  <span className="text-sm font-semibold text-ink-900">{s.name}</span>
+                  <span className="text-sm font-semibold text-ink-900 whitespace-nowrap">{s.name}</span>
                   {s.owner && <span className="ml-auto text-xs font-medium text-ink-400">{s.owner}</span>}
                 </div>
                 <div className="mt-0.5 text-xs text-ink-500">{s.threshold}</div>
@@ -155,7 +155,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     <th
                       key={bucket.key}
                       colSpan={3}
-                      className={`pt-4 pb-1 px-3 text-center font-semibold border-l border-ink-100 ${
+                      className={`pt-4 pb-1 px-3 text-center font-semibold whitespace-nowrap border-l border-ink-100 ${
                         bucket.isTotal ? 'bg-ink-50' : ''
                       }`}
                     >
@@ -163,7 +163,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     </th>
                   ))}
                 </tr>
-                <tr className="text-xs text-ink-500 border-b border-ink-200">
+                <tr className="text-xs text-ink-500 border-b border-ink-200 whitespace-nowrap">
                   {data.timeBuckets.map((bucket) => (
                     <React.Fragment key={bucket.key}>
                       <th className={`pb-2.5 px-3 text-right font-medium border-l border-ink-100 ${bucket.isTotal ? 'bg-ink-50' : ''}`}>金額</th>
