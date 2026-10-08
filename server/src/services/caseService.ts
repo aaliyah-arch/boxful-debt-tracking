@@ -266,9 +266,8 @@ export async function updateFAFields(
     demandSmsDate?: Date | string | null;
     terminationDueDate?: Date | string | null;
     terminationSmsDate?: Date | string | null;
-    certifiedLetterUrl?: string | null;
+    certifiedLetterSentDate?: Date | string | null;
     certifiedLetterReceivedDate?: Date | string | null;
-    certifiedLetterDueDate?: Date | string | null;
     faNotes?: string | null;
   },
   userId: string
@@ -301,9 +300,8 @@ export async function updateFAFields(
       demandSmsDate: pickDate(data.demandSmsDate, existing.demandSmsDate),
       terminationDueDate: pickDate(data.terminationDueDate, existing.terminationDueDate),
       terminationSmsDate: pickDate(data.terminationSmsDate, existing.terminationSmsDate),
-      certifiedLetterUrl: data.certifiedLetterUrl !== undefined ? data.certifiedLetterUrl : existing.certifiedLetterUrl,
+      certifiedLetterSentDate: pickDate(data.certifiedLetterSentDate, existing.certifiedLetterSentDate),
       certifiedLetterReceivedDate: pickDate(data.certifiedLetterReceivedDate, existing.certifiedLetterReceivedDate),
-      certifiedLetterDueDate: pickDate(data.certifiedLetterDueDate, existing.certifiedLetterDueDate),
       faNotes: data.faNotes !== undefined ? data.faNotes : existing.faNotes,
       stage: newStage,
     },
@@ -350,9 +348,8 @@ export async function updateFAFields(
       terminationNoticeDate: fmtDate(updated.terminationNoticeDate),
       terminationDueDate: fmtDate(updated.terminationDueDate),
       terminationSmsDate: fmtDate(updated.terminationSmsDate),
-      certifiedLetterUrl: updated.certifiedLetterUrl,
+      certifiedLetterSentDate: fmtDate(updated.certifiedLetterSentDate),
       certifiedLetterReceivedDate: fmtDate(updated.certifiedLetterReceivedDate),
-      certifiedLetterDueDate: fmtDate(updated.certifiedLetterDueDate),
       faNotes: updated.faNotes,
       stage: updated.stage,
     }

@@ -62,12 +62,11 @@ export interface CaseRecord {
   demandMethod?: DemandMethod | null; // 催告方式 -> 試算表「催告方式」
   demandSmsDate?: string | null; // -> 試算表「電子催告簡訊日期」
   terminationNoticeDate?: string | null; // 終止函發送日期 -> 試算表「服務終止日」
-  terminationDueDate?: string | null; // -> 試算表「服務終止日」後的「到期日期」
+  terminationDueDate?: string | null; // -> 試算表「服務終止日」左邊的「到期日期」
   terminationSmsDate?: string | null; // -> 試算表「終止簡訊通知」
   terminationDocUrl?: string | null;
-  certifiedLetterUrl?: string | null; // -> 試算表「存證信函」
+  certifiedLetterSentDate?: string | null; // 存證信函發送日期 -> 試算表「存證信函」
   certifiedLetterReceivedDate?: string | null; // -> 試算表「收件日期」
-  certifiedLetterDueDate?: string | null; // -> 試算表「收件日期」後的「到期日期」
   faNotes?: string | null;
   lastImportedAt: string;
   createdAt: string;

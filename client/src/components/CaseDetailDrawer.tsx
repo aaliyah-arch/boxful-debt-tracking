@@ -58,9 +58,8 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   const [terminationNoticeDate, setTerminationNoticeDate] = useState('');
   const [terminationDueDate, setTerminationDueDate] = useState('');
   const [terminationSmsDate, setTerminationSmsDate] = useState('');
-  const [certifiedLetterUrl, setCertifiedLetterUrl] = useState('');
+  const [certifiedLetterSentDate, setCertifiedLetterSentDate] = useState('');
   const [certifiedLetterReceivedDate, setCertifiedLetterReceivedDate] = useState('');
-  const [certifiedLetterDueDate, setCertifiedLetterDueDate] = useState('');
   const [faNotes, setFaNotes] = useState('');
   const [uploadingKind, setUploadingKind] = useState<string | null>(null);
 
@@ -94,9 +93,8 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
       setTerminationNoticeDate(formatDateInput(data.terminationNoticeDate));
       setTerminationDueDate(formatDateInput(data.terminationDueDate));
       setTerminationSmsDate(formatDateInput(data.terminationSmsDate));
-      setCertifiedLetterUrl(data.certifiedLetterUrl || '');
+      setCertifiedLetterSentDate(formatDateInput(data.certifiedLetterSentDate));
       setCertifiedLetterReceivedDate(formatDateInput(data.certifiedLetterReceivedDate));
-      setCertifiedLetterDueDate(formatDateInput(data.certifiedLetterDueDate));
       setFaNotes(data.faNotes || '');
 
       // Populate Close states
@@ -157,9 +155,8 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
         terminationNoticeDate: terminationNoticeDate || null,
         terminationDueDate: terminationDueDate || null,
         terminationSmsDate: terminationSmsDate || null,
-        certifiedLetterUrl: certifiedLetterUrl || null,
+        certifiedLetterSentDate: certifiedLetterSentDate || null,
         certifiedLetterReceivedDate: certifiedLetterReceivedDate || null,
-        certifiedLetterDueDate: certifiedLetterDueDate || null,
         faNotes: faNotes || null,
       });
       setCaseData(res.case);
@@ -198,7 +195,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   };
 
   const handleUpload = async (
-    kind: 'DEMAND_DOC' | 'CERTIFIED_LETTER',
+    kind: 'DEMAND_DOC',
     file: File | undefined,
     setUrl: (url: string) => void
   ) => {
@@ -209,7 +206,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
       const url = await uploadFileToGas(file, {
         businessUnit: caseData.businessUnit,
         uid: caseData.uid,
-        kind: kind === 'DEMAND_DOC' ? '電子催告檔' : '存證信函',
+        kind: '電子催告檔',
       });
       setUrl(url);
       setFeedbackMsg({ type: 'success', text: `「${file.name}」已上傳至 Google 雲端，請按「儲存催告與終止紀錄」回寫試算表` });
@@ -221,7 +218,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   };
 
   const renderFileField = (
-    kind: 'DEMAND_DOC' | 'CERTIFIED_LETTER',
+    kind: 'DEMAND_DOC',
     label: string,
     url: string,
     setUrl: (url: string) => void,
@@ -704,8 +701,17 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     <FileText className="w-3.5 h-3.5" />
                     存證信函
                   </span>
-                  {renderFileField('CERTIFIED_LETTER', '存證信函檔案', certifiedLetterUrl, setCertifiedLetterUrl, 'violet')}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">發送日期</label>
+                      <input
+                        type="date"
+                        disabled={!isFATeam}
+                        value={certifiedLetterSentDate}
+                        onChange={(e) => setCertifiedLetterSentDate(e.target.value)}
+                        className={dateInputCls}
+                      />
+                    </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-700 mb-1">收件日期</label>
                       <input
@@ -713,16 +719,6 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                         disabled={!isFATeam}
                         value={certifiedLetterReceivedDate}
                         onChange={(e) => setCertifiedLetterReceivedDate(e.target.value)}
-                        className={dateInputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">到期日期</label>
-                      <input
-                        type="date"
-                        disabled={!isFATeam}
-                        value={certifiedLetterDueDate}
-                        onChange={(e) => setCertifiedLetterDueDate(e.target.value)}
                         className={dateInputCls}
                       />
                     </div>

@@ -74,9 +74,8 @@ model CaseRecord {
   demandSmsDate       DateTime?    // 電子催告簡訊日期
   terminationDueDate  DateTime?    // 服務終止到期日期
   terminationSmsDate  DateTime?    // 終止簡訊通知日期
-  certifiedLetterUrl  String?      // 存證信函檔案連結
+  certifiedLetterSentDate DateTime? // 存證信函發送日期
   certifiedLetterReceivedDate DateTime? // 存證信函收件日期
-  certifiedLetterDueDate DateTime?  // 存證信函到期日期
   faNotes             String?      // FA 備註
   
   // 歷史與批次更新追蹤

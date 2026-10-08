@@ -9,12 +9,11 @@
  * 1. OutstandingReportValet / OutstandingReportPepper：每週上傳的原始報表整份覆蓋。
  * 2. Valet扣款失敗通知追蹤 / Pepper扣款失敗通知追蹤：彙整與前端回寫。
  *    - 所有欄位一律「依試算表第一列的表頭名稱」定位，不依欄位順序。
- *    - 表頭重複的「到期日期」依其左側最近的欄位判斷用途：
- *        電子催告日期 → 到期日期   = 催告到期日
- *        收件日期     → 到期日期   = 存證信函到期日期
- *        服務終止日   → 到期日期   = 服務終止到期日期
+ *    - 表頭重複的「到期日期」依其右側相鄰的欄位判斷用途（到期日期在左）：
+ *        到期日期 ← 電子催告日期   = 催告到期日
+ *        到期日期 ← 服務終止日     = 服務終止到期日期
  * 3. 同一客戶先前已結案又再欠款：保留舊列，新增一列追蹤未結案那筆。
- * 4. 前端上傳的電子催告檔 / 存證信函會存到試算表所在資料夾下的「2bad-debtbackup 附件」資料夾，
+ * 4. 前端上傳的電子催告檔會存到試算表所在資料夾下的「2bad-debtbackup 附件」資料夾，
  *    並把檔案連結回填到對應欄位。
  */
 
@@ -32,7 +31,7 @@ var UPLOAD_FOLDER_NAME = '2bad-debtbackup 附件';
  * key       : 前端 / 程式使用的欄位代號
  * names     : 試算表表頭可接受的名稱（第一個為建議名稱，其餘為相容舊名稱）
  * dupName   : 表頭重複時使用的共用名稱（例如「到期日期」）
- * anchor    : dupName 的判斷依據：取 anchor 欄位右側最近、尚未被其他欄位認領的 dupName 欄
+ * anchor    : dupName 的判斷依據：取 anchor 欄位左側最近、尚未被其他欄位認領的 dupName 欄（找不到才往右找）
  * append    : 試算表沒有這個欄位時，第一次回寫會自動補在最右側
  * valetOnly : 只有 Valet 才有的欄位
  * date      : 日期欄位（統一寫成 yyyy-MM-dd）
@@ -69,9 +68,8 @@ var FIELD_SPECS = [
   { key: 'terminationSmsDate',    names: ['終止簡訊通知'], date: true, append: true },
   { key: 'terminationNoticeDate', names: ['服務終止日', '終止函日期'], date: true, append: true },
   { key: 'terminationDueDate',    names: ['服務終止到期日期', '終止到期日期'], dupName: '到期日期', anchor: 'terminationNoticeDate', date: true },
-  { key: 'certifiedLetterUrl',    names: ['存證信函'], append: true },
+  { key: 'certifiedLetterSentDate',names: ['存證信函', '存證信函發送日期'], date: true, append: true },
   { key: 'certifiedLetterReceivedDate', names: ['收件日期'], date: true, append: true },
-  { key: 'certifiedLetterDueDate',names: ['存證信函到期日期'], dupName: '到期日期', anchor: 'certifiedLetterReceivedDate', date: true },
   { key: 'faNotes',               names: ['FA備註'] },
 
   { key: 'updatedAt',      names: ['最後更新時間', '更新時間'] }
@@ -81,12 +79,12 @@ var FIELD_SPECS = [
 var DEFAULT_TRACKING_HEADERS = {
   VALET: ['UID', 'Type of Service', 'NAME', 'Outstanding Days', 'Email', '地址', 'Total Outstanding Amount', 'Phone',
           '催帳階段/狀態', '追蹤標籤', '結案狀態', 'LINE日期', '寄信日期', '寄簡訊日期', '處理方式/客人回應', '結案日期',
-          '催告方式', '電子催告簡訊日期', '電子催告檔', '電子催告日期', '到期日期', '終止簡訊通知',
-          '服務終止日', '到期日期', '存證信函', '收件日期', '到期日期', '最後更新時間'],
+          '催告方式', '電子催告簡訊日期', '電子催告檔', '到期日期', '電子催告日期', '終止簡訊通知',
+          '到期日期', '服務終止日', '存證信函', '收件日期', '最後更新時間'],
   PEPPER: ['UID', 'NAME', 'Email', 'Outstanding Days', 'Total Outstanding Amount', 'Phone',
            '催帳階段/狀態', '追蹤標籤', '結案狀態', 'LINE日期', '寄信日期', '寄簡訊日期', '處理方式/客人回應', '結案日期',
-           '催告方式', '電子催告簡訊日期', '電子催告檔', '電子催告日期', '到期日期', '終止簡訊通知',
-           '服務終止日', '到期日期', '存證信函', '收件日期', '到期日期', '最後更新時間']
+           '催告方式', '電子催告簡訊日期', '電子催告檔', '到期日期', '電子催告日期', '終止簡訊通知',
+           '到期日期', '服務終止日', '存證信函', '收件日期', '最後更新時間']
 };
 
 // ==============================================================================
@@ -205,21 +203,23 @@ function resolveColumns(sheet, businessUnit) {
     }
   });
 
-  // 第二輪：重複名稱（到期日期）依錨點欄位判斷，錨點靠左的先認領
+  // 第二輪：重複名稱（到期日期）依錨點欄位判斷：先取錨點「左側」最近的，找不到再往右找
   var dupSpecs = specs.filter(function (s) { return s.dupName && col[s.key] === -1; });
-  dupSpecs.sort(function (a, b) { return (col[a.anchor] === undefined ? 9999 : col[a.anchor]) - (col[b.anchor] === undefined ? 9999 : col[b.anchor]); });
-  dupSpecs.forEach(function (s) {
+  var pickDup = function (s, leftSide) {
+    if (col[s.key] !== -1) return;
     var anchorIdx = col[s.anchor];
     if (anchorIdx === undefined || anchorIdx === -1) return;
     var p = positions[normalizeHeader(s.dupName)] || [];
+    var best = -1;
     for (var i = 0; i < p.length; i++) {
-      if (p[i] > anchorIdx && !claimed[p[i]]) {
-        col[s.key] = p[i];
-        claimed[p[i]] = true;
-        break;
-      }
+      if (claimed[p[i]]) continue;
+      if (leftSide && p[i] < anchorIdx && (best === -1 || p[i] > best)) best = p[i];
+      if (!leftSide && p[i] > anchorIdx && (best === -1 || p[i] < best)) best = p[i];
     }
-  });
+    if (best !== -1) { col[s.key] = best; claimed[best] = true; }
+  };
+  dupSpecs.forEach(function (s) { pickDup(s, true); });
+  dupSpecs.forEach(function (s) { pickDup(s, false); });
 
   var nonEmpty = 0;
   headers.forEach(function (h, i) { if (h !== '') nonEmpty = i + 1; });
@@ -492,7 +492,7 @@ function handleUpdateRowStatus(ss, businessUnit, uid, fields) {
 }
 
 // ==============================================================================
-// 4. 檔案上傳（電子催告檔 / 存證信函）
+// 4. 檔案上傳（電子催告檔）
 // ==============================================================================
 
 function handleUploadFile(ss, payload) {
