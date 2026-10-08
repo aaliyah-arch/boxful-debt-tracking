@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { FileSpreadsheet, Download, CheckCircle2, AlertCircle, X, Loader2 } from 'lucide-react';
 import type { BusinessUnit } from '../types';
 import { reportsApi } from '../api';
@@ -97,7 +98,7 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
       ]
     : [];
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="upload-title">
       <div className="absolute inset-0 bg-ink-950/40 animate-fade-in" onClick={onClose} aria-hidden />
 
@@ -253,6 +254,7 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -21,7 +21,7 @@ export const STAGES: StageMeta[] = [
   { code: 'STAGE_1', name: '勸導期', threshold: '滿 30 天', owner: '2C', dot: 'bg-stage-1', bar: 'bg-stage-1', text: 'text-brand-800' },
   { code: 'STAGE_2', name: '催告期', threshold: '滿 50 天', owner: 'FA', dot: 'bg-stage-2', bar: 'bg-stage-2', text: 'text-[#8a5a0b]' },
   { code: 'STAGE_3', name: '終止期', threshold: '滿 80 天', owner: 'FA', dot: 'bg-stage-3', bar: 'bg-stage-3', text: 'text-[#a13e2e]' },
-  { code: 'STAGE_4', name: '待 write-off', threshold: '滿 95 天或終止滿 15 天', owner: 'FA', dot: 'bg-stage-4', bar: 'bg-stage-4', text: 'text-stage-4' },
+  { code: 'STAGE_4', name: '待 write-off', threshold: '滿 95 天', owner: 'FA', dot: 'bg-stage-4', bar: 'bg-stage-4', text: 'text-stage-4' },
   { code: 'CLOSED', name: '已結案', threshold: '已繳清或沖銷', dot: 'bg-stage-closed', bar: 'bg-stage-closed', text: 'text-stage-closed' },
 ];
 

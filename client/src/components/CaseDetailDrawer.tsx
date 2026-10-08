@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ExternalLink, CheckCircle2, AlertTriangle, Loader2, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import type { CaseRecord, DemandMethod } from '../types';
@@ -292,7 +293,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
       ]
     : [];
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="案件詳情">
       <div className="absolute inset-0 bg-ink-950/40 animate-fade-in" onClick={onClose} aria-hidden />
 
@@ -582,6 +583,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
