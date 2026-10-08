@@ -17,13 +17,13 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   icon,
   trend,
   badge,
-  colorClass = 'text-slate-900',
+  colorClass = 'text-ink-900',
 }) => {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:shadow-md transition-shadow">
+    <div className="group relative bg-white rounded-2xl border border-ink-200/80 p-5 shadow-xs hover:shadow-md hover:shadow-brand-900/5 hover:border-brand-200 transition-all">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-500">{title}</span>
-        <div className="p-2.5 rounded-lg bg-slate-50 text-slate-600 border border-slate-100">
+        <span className="text-sm font-medium text-ink-500">{title}</span>
+        <div className="p-2.5 rounded-xl bg-ink-50 text-ink-600 ring-1 ring-inset ring-ink-100 group-hover:bg-brand-50 group-hover:ring-brand-100 transition-colors">
           {icon}
         </div>
       </div>
@@ -32,7 +32,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
           {value}
         </span>
         {subValue && (
-          <span className="text-sm text-slate-500 font-medium">
+          <span className="text-sm text-ink-500 font-medium">
             {subValue}
           </span>
         )}
@@ -40,11 +40,11 @@ export const MetricCard: React.FC<MetricCardProps> = ({
       {(trend || badge) && (
         <div className="mt-2 flex items-center gap-2">
           {badge && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-ink-100 text-ink-600">
               {badge}
             </span>
           )}
-          {trend && <span className="text-xs text-slate-500">{trend}</span>}
+          {trend && <span className="text-xs text-ink-500">{trend}</span>}
         </div>
       )}
     </div>

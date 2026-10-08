@@ -118,9 +118,9 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
   return (
     <div className="space-y-6 animate-fade-in pb-12">
       {/* Top Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-ink-200 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <div className="flex items-center bg-ink-100 p-1 rounded-xl border border-ink-200">
             <button
               onClick={() => {
                 onSelectBusinessUnit('VALET');
@@ -128,8 +128,8 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
               }}
               className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
                 businessUnit === 'VALET'
-                  ? 'bg-red-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-valet-600 text-white shadow-xs'
+                  : 'text-ink-600 hover:text-ink-900'
               }`}
             >
               Valet 欠款案件
@@ -141,8 +141,8 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
               }}
               className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
                 businessUnit === 'PEPPER'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-pepper-600 text-white shadow-xs'
+                  : 'text-ink-600 hover:text-ink-900'
               }`}
             >
               Pepper 欠款案件
@@ -180,10 +180,10 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
           <button
             onClick={() => refetch()}
             disabled={isFetching}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-2 rounded-xl text-ink-400 hover:text-ink-700 hover:bg-ink-100 transition-colors"
             title="重新載入"
           >
-            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-indigo-600' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-brand-600' : ''}`} />
           </button>
         </div>
 
@@ -191,20 +191,20 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
           <button
             onClick={handleExport}
             disabled={isExporting || !data?.items?.length}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-xl transition-all shadow-xs disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-ink-700 bg-white hover:bg-ink-50 border border-ink-300 rounded-xl transition-all shadow-xs disabled:opacity-50"
           >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
+            <Download className="w-3.5 h-3.5 text-ink-500" />
             {isExporting ? '匯出中...' : '匯出 Excel 報表'}
           </button>
         </div>
       </div>
 
       {/* Filters Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+      <div className="bg-white p-4 rounded-2xl border border-ink-200 shadow-xs space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Keyword Search */}
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="搜尋 UID / 姓名 / 電話 / Email / 備註..."
@@ -213,7 +213,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="w-full text-xs rounded-xl border-slate-300 bg-slate-50/50 pl-9 pr-3 py-2.5 border focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full text-xs rounded-xl border-ink-300 bg-ink-50/50 pl-9 pr-3 py-2.5 border focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400"
             />
           </div>
 
@@ -225,7 +225,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                 setStageFilter(e.target.value);
                 setPage(1);
               }}
-              className="w-full text-xs rounded-xl border-slate-300 bg-slate-50/50 px-3 py-2.5 border focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full text-xs rounded-xl border-ink-300 bg-ink-50/50 px-3 py-2.5 border focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400"
             >
               <option value="">全部階段 (All Stages)</option>
               <option value="STAGE_1">1. 第一階段：勸導期 (≥30天)</option>
@@ -245,7 +245,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                 setContactStatus(e.target.value);
                 setPage(1);
               }}
-              className="w-full text-xs rounded-xl border-slate-300 bg-slate-50/50 px-3 py-2.5 border focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full text-xs rounded-xl border-ink-300 bg-ink-50/50 px-3 py-2.5 border focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400"
             >
               <option value="">全部聯絡狀態</option>
               <option value="line_contacted">🟢 Line 已通知</option>
@@ -263,7 +263,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                 setMinDays(e.target.value ? Number(e.target.value) : undefined);
                 setPage(1);
               }}
-              className="w-full text-xs rounded-xl border-slate-300 bg-slate-50/50 px-3 py-2.5 border focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full text-xs rounded-xl border-ink-300 bg-ink-50/50 px-3 py-2.5 border focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400"
             >
               <option value="">全部逾期天數</option>
               <option value="30">逾期 30 天以上 (勸導標準)</option>
@@ -275,15 +275,15 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
         </div>
 
         {/* Filter Results Summary */}
-        <div className="flex items-center justify-between pt-2 text-xs text-slate-500 border-t border-slate-100">
+        <div className="flex items-center justify-between pt-2 text-xs text-ink-500 border-t border-ink-100">
           <div>
-            共找到 <strong className="text-slate-800">{data?.pagination.totalCount || 0}</strong> 筆案件，
+            共找到 <strong className="text-ink-800">{data?.pagination.totalCount || 0}</strong> 筆案件，
             篩選總欠款金額: <strong className="text-red-600 font-semibold">${(data?.totalAmountSum || 0).toLocaleString()}</strong>
           </div>
           {(stageFilter || search || contactStatus || minDays !== undefined) && (
             <button
               onClick={clearFilters}
-              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+              className="text-xs text-brand-600 hover:text-brand-800 font-medium"
             >
               重設所有篩選
             </button>
@@ -292,29 +292,29 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
       </div>
 
       {/* Cases Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-ink-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+              <tr className="bg-ink-50 text-ink-600 font-bold border-b border-ink-200">
                 <th className="py-3 px-4 w-32">客戶 UID</th>
                 <th className="py-3 px-3 w-36">姓名</th>
                 <th
                   onClick={() => handleSort('outstandingAmount')}
-                  className="py-3 px-3 text-right cursor-pointer hover:text-slate-900 select-none w-28"
+                  className="py-3 px-3 text-right cursor-pointer hover:text-ink-900 select-none w-28"
                 >
                   <div className="flex items-center justify-end gap-1">
                     欠款金額
-                    <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                    <ArrowUpDown className="w-3 h-3 text-ink-400" />
                   </div>
                 </th>
                 <th
                   onClick={() => handleSort('outstandingDays')}
-                  className="py-3 px-3 text-center cursor-pointer hover:text-slate-900 select-none w-24"
+                  className="py-3 px-3 text-center cursor-pointer hover:text-ink-900 select-none w-24"
                 >
                   <div className="flex items-center justify-center gap-1">
                     逾期天數
-                    <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                    <ArrowUpDown className="w-3 h-3 text-ink-400" />
                   </div>
                 </th>
                 <th className="py-3 px-3 w-48">當前階段</th>
@@ -324,17 +324,17 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                 <th className="py-3 px-4 text-right w-20">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-ink-100 text-ink-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center text-slate-400">
-                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-600" />
+                  <td colSpan={9} className="py-16 text-center text-ink-400">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-brand-600" />
                     載入中...
                   </td>
                 </tr>
               ) : data?.items?.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center text-slate-400">
+                  <td colSpan={9} className="py-16 text-center text-ink-400">
                     查無符合條件的欠款案件
                   </td>
                 </tr>
@@ -343,28 +343,28 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                   <tr
                     key={item.id}
                     onClick={() => setSelectedCaseId(item.id)}
-                    className="hover:bg-indigo-50/30 transition-colors cursor-pointer"
+                    className="hover:bg-brand-50/30 transition-colors cursor-pointer"
                   >
                     {/* UID */}
-                    <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                    <td className="py-3 px-4 font-mono font-bold text-ink-900">
                       {item.uid}
                     </td>
 
                     {/* Name & Contact Info */}
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold text-slate-900">{item.name}</span>
+                        <span className="font-semibold text-ink-900">{item.name}</span>
                         {item.statusTag === 'PENDING_CONFIRMATION' && !item.isClosed && (
                           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
                             待確認結案
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-slate-400 font-mono mt-0.5">{item.phone || item.email || '-'}</div>
+                      <div className="text-[11px] text-ink-400 font-mono mt-0.5">{item.phone || item.email || '-'}</div>
                       {/* Valet 專屬：顯示服務類型與地址 */}
                       {businessUnit === 'VALET' && (item.serviceType || item.address) && (
-                        <div className="text-[10px] text-slate-500 truncate max-w-xs mt-0.5">
-                          {item.serviceType && <span className="text-indigo-600 font-medium mr-1.5">[{item.serviceType}]</span>}
+                        <div className="text-[10px] text-ink-500 truncate max-w-xs mt-0.5">
+                          {item.serviceType && <span className="text-brand-600 font-medium mr-1.5">[{item.serviceType}]</span>}
                           {item.address}
                         </div>
                       )}
@@ -385,7 +385,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                             ? 'bg-amber-100 text-amber-700'
                             : item.outstandingDays >= 30
                             ? 'bg-blue-100 text-blue-700'
-                            : 'bg-slate-100 text-slate-600'
+                            : 'bg-ink-100 text-ink-600'
                         }`}
                       >
                         {item.outstandingDays} 天
@@ -401,11 +401,11 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                     <td className="py-3 px-3 text-[11px]">
                       <div className="flex items-center gap-1.5">
                         {item.lineNoticeDate ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                          <span className="inline-flex items-center gap-1 text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
                             Line: {format(new Date(item.lineNoticeDate), 'MM/dd')}
                           </span>
                         ) : (
-                          <span className="text-slate-300">Line未通</span>
+                          <span className="text-ink-300">Line未通</span>
                         )}
                         {item.emailNoticeDate && (
                           <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
@@ -419,7 +419,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                         )}
                       </div>
                       {item.twoCNotes && (
-                        <p className="text-[10px] text-slate-400 truncate max-w-[150px] mt-0.5">
+                        <p className="text-[10px] text-ink-400 truncate max-w-[150px] mt-0.5">
                           {item.twoCNotes}
                         </p>
                       )}
@@ -444,18 +444,18 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                         </div>
                       )}
                       {!item.demandNoticeDate && !item.terminationNoticeDate && (
-                        <span className="text-slate-300">-</span>
+                        <span className="text-ink-300">-</span>
                       )}
                     </td>
 
                     {/* Closed Status */}
                     <td className="py-3 px-3 text-center">
                       {item.isClosed ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-brand-100 text-brand-800">
                           已結案
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] text-slate-400">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] text-ink-400">
                           處理中
                         </span>
                       )}
@@ -468,7 +468,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                           e.stopPropagation();
                           setSelectedCaseId(item.id);
                         }}
-                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors"
+                        className="text-xs font-semibold text-brand-600 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 px-2.5 py-1 rounded-lg transition-colors"
                       >
                         編輯
                       </button>
@@ -482,7 +482,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
 
         {/* Pagination */}
         {data && data.pagination.totalPages > 1 && (
-          <div className="px-5 py-3.5 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 bg-slate-50/50">
+          <div className="px-5 py-3.5 border-t border-ink-200 flex items-center justify-between text-xs text-ink-500 bg-ink-50/50">
             <div>
               頁次 {data.pagination.page} / {data.pagination.totalPages}（每頁 {data.pagination.pageSize} 筆）
             </div>
@@ -490,14 +490,14 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
               <button
                 disabled={page <= 1}
                 onClick={() => setPage(page - 1)}
-                className="p-1.5 rounded-lg border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-50 transition-colors"
+                className="p-1.5 rounded-lg border border-ink-300 bg-white disabled:opacity-40 hover:bg-ink-50 transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
                 disabled={page >= data.pagination.totalPages}
                 onClick={() => setPage(page + 1)}
-                className="p-1.5 rounded-lg border border-slate-300 bg-white disabled:opacity-40 hover:bg-slate-50 transition-colors"
+                className="p-1.5 rounded-lg border border-ink-300 bg-white disabled:opacity-40 hover:bg-ink-50 transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>

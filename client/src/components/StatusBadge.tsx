@@ -23,9 +23,9 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   if (isClosed || stage === 'CLOSED') {
     return (
       <span
-        className={`inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 ${sizeClasses[size]} ${className}`}
+        className={`inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200 ${sizeClasses[size]} ${className}`}
       >
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        <span className="w-1.5 h-1.5 rounded-full bg-brand-500"></span>
         5. 已結案
       </span>
     );
@@ -72,9 +72,9 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     default:
       return (
         <span
-          className={`inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 ${sizeClasses[size]} ${className}`}
+          className={`inline-flex items-center gap-1 rounded-full bg-ink-100 text-ink-600 border border-ink-200 ${sizeClasses[size]} ${className}`}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+          <span className="w-1.5 h-1.5 rounded-full bg-ink-400"></span>
           追蹤中 (未滿30天)
         </span>
       );

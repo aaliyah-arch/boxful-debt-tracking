@@ -44,10 +44,10 @@ const MainLayout: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
+      <div className="min-h-screen bg-gradient-to-br from-brand-900 to-ink-950 flex items-center justify-center text-white">
         <div className="text-center space-y-2">
-          <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-sm font-medium text-slate-300">系統載入中...</p>
+          <div className="w-10 h-10 border-4 border-brand-300 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-sm font-medium text-brand-100/80">系統載入中...</p>
         </div>
       </div>
     );
@@ -67,7 +67,7 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen flex flex-col">
       {/* Navigation Bar */}
       <Navbar
         currentBusinessUnit={businessUnit}
