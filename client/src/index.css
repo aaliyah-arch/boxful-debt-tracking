@@ -1,15 +1,16 @@
 @import "tailwindcss";
 
 /*
- * Boxful 青綠主題
- * 主色 brand-400 = #57BBAF（Boxful 品牌色）
- * 需要白字的按鈕請用 brand-600 以上，確保對比度足夠
+ * Boxful 呆帳追蹤 — 設計系統
+ *
+ * brand  ：Boxful 品牌青綠，brand-400 = #57BBAF。要放白字的按鈕用 brand-700。
+ * ink    ：帶青綠調的中性色，文字與框線都從這裡取。
+ * stage  ：催帳升級階梯的漸進色（追蹤中 → 勸導 → 催告 → 終止 → 待沖銷），
+ *          由冷到暖，全站所有階段標示都只用這一組。
  */
 @theme {
-  --font-sans: "Inter", "Noto Sans TC", ui-sans-serif, system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Manrope", "Noto Sans TC", ui-sans-serif, system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
 
-  /* 品牌主色：Boxful teal */
   --color-brand-50: #f0faf8;
   --color-brand-100: #d8f1ed;
   --color-brand-200: #b2e3dc;
@@ -17,58 +18,54 @@
   --color-brand-400: #57bbaf;
   --color-brand-500: #3ea396;
   --color-brand-600: #2f877c;
-  --color-brand-700: #286c64;
-  --color-brand-800: #245752;
-  --color-brand-900: #214945;
-  --color-brand-950: #0e2b28;
+  --color-brand-700: #1e6b62;
+  --color-brand-800: #1a5650;
+  --color-brand-900: #184743;
+  --color-brand-950: #0c2a27;
 
-  /* 中性色：帶一點青綠調的灰，與主色和諧 */
-  --color-ink-50: #f6f9f8;
-  --color-ink-100: #edf2f1;
-  --color-ink-200: #dde5e3;
-  --color-ink-300: #c4d0cd;
-  --color-ink-400: #93a3a0;
-  --color-ink-500: #6b7c79;
-  --color-ink-600: #51615e;
-  --color-ink-700: #3d4b49;
-  --color-ink-800: #2a3634;
-  --color-ink-900: #1b2523;
-  --color-ink-950: #101817;
+  --color-ink-50: #f5f8f7;
+  --color-ink-100: #ecf1f0;
+  --color-ink-200: #dce5e2;
+  --color-ink-300: #c2cfcc;
+  --color-ink-400: #8fa29e;
+  --color-ink-500: #5f7470;
+  --color-ink-600: #4a5d59;
+  --color-ink-700: #364744;
+  --color-ink-800: #243431;
+  --color-ink-900: #16302b;
+  --color-ink-950: #0d1f1c;
 
-  /* 事業單位：Valet（珊瑚紅） */
-  --color-valet-50: #fdf4f1;
-  --color-valet-100: #fbe5de;
-  --color-valet-200: #f6c7b9;
-  --color-valet-300: #efa38d;
-  --color-valet-400: #e57c62;
-  --color-valet-500: #d9614a;
-  --color-valet-600: #c24d38;
-  --color-valet-700: #a13e2e;
-  --color-valet-800: #84352a;
-  --color-valet-900: #6d2f27;
+  --color-stage-0: #b9c8c4;
+  --color-stage-1: #57bbaf;
+  --color-stage-2: #e3a93b;
+  --color-stage-3: #d9614a;
+  --color-stage-4: #8e3b4f;
+  --color-stage-closed: #1e6b62;
 
-  /* 事業單位：Pepper（橄欖綠，與品牌青綠區隔） */
-  --color-pepper-50: #f5f8ee;
-  --color-pepper-100: #e8f0d8;
-  --color-pepper-200: #d1e1b3;
-  --color-pepper-300: #b2cc85;
-  --color-pepper-400: #93b55e;
-  --color-pepper-500: #779a43;
-  --color-pepper-600: #5e7c34;
-  --color-pepper-700: #4a612b;
-  --color-pepper-800: #3d4e27;
-  --color-pepper-900: #344224;
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
 
-  --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-fade-in: fade-in 0.2s ease-out both;
+  --animate-slide-in: slide-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
 
+  /* 只動 opacity：transform 動畫會讓裡面的 position: fixed 遮罩被侷限在容器內 */
   @keyframes fade-in {
     from {
       opacity: 0;
-      transform: translateY(4px);
     }
     to {
       opacity: 1;
+    }
+  }
+
+  @keyframes slide-in {
+    from {
+      transform: translateX(24px);
+      opacity: 0;
+    }
+    to {
       transform: none;
+      opacity: 1;
     }
   }
 }
@@ -77,19 +74,16 @@
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "tnum" 1, "cv11" 1;
   }
 
   body {
     background-color: var(--color-ink-50);
-    background-image: radial-gradient(
-      ellipse 80% 40% at 50% -10%,
-      color-mix(in oklab, var(--color-brand-100) 70%, transparent),
-      transparent
-    );
-    background-attachment: fixed;
     color: var(--color-ink-900);
     min-height: 100vh;
     font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.55;
   }
 
   ::selection {
@@ -97,22 +91,129 @@
     color: var(--color-brand-950);
   }
 
-  .font-mono {
-    font-variant-numeric: tabular-nums;
-  }
-
   button:not(:disabled),
-  [role="button"]:not(:disabled) {
+  [role="button"]:not(:disabled),
+  summary {
     cursor: pointer;
   }
 
-  :where(button, a, [role="button"]):focus-visible {
-    outline: 2px solid var(--color-brand-400);
+  :where(button, a, summary, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid var(--color-brand-500);
     outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.45;
+    cursor: pointer;
   }
 
   * {
     scrollbar-width: thin;
     scrollbar-color: var(--color-ink-300) transparent;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* 表單欄位：全站共用一種樣式 */
+  .field {
+    display: block;
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--color-ink-200);
+    background: white;
+    padding: 0.5rem 0.75rem;
+    font-size: 13px;
+    color: var(--color-ink-900);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .field::placeholder {
+    color: var(--color-ink-400);
+  }
+  .field:hover:not(:disabled) {
+    border-color: var(--color-ink-300);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--color-brand-500);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-brand-400) 22%, transparent);
+  }
+  .field:disabled {
+    background: var(--color-ink-50);
+    color: var(--color-ink-600);
+    cursor: not-allowed;
+  }
+  select.field {
+    appearance: none;
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235f7470' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+  }
+
+  .field-label {
+    display: block;
+    margin-bottom: 0.375rem;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-ink-600);
+  }
+
+  /* 按鈕 */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border-radius: 8px;
+    padding: 0.5rem 0.9rem;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--color-brand-700);
+    color: white;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-brand-800);
+  }
+  .btn-secondary {
+    background: white;
+    color: var(--color-ink-800);
+    border: 1px solid var(--color-ink-200);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--color-ink-300);
+    background: var(--color-ink-50);
+  }
+  .btn-ghost {
+    color: var(--color-ink-600);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--color-ink-100);
+    color: var(--color-ink-900);
+  }
+
+  /* 主要內容面板：一種圓角、一種框線，不疊陰影 */
+  .panel {
+    background: white;
+    border: 1px solid var(--color-ink-200);
+    border-radius: 14px;
   }
 }

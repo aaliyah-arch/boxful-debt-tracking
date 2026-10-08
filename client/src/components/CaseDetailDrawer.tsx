@@ -1,27 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import {
-  X,
-  Phone,
-  Mail,
-  Calendar,
-  Clock,
-  MessageSquare,
-  ExternalLink,
-  CheckCircle,
-  Save,
-  AlertTriangle,
-  History,
-  ShieldAlert,
-  Loader2,
-  Upload,
-  FileText,
-} from 'lucide-react';
+import { X, ExternalLink, CheckCircle2, AlertTriangle, Loader2, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import type { CaseRecord, DemandMethod } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { casesApi } from '../api';
 import { uploadFileToGas } from '../api/standaloneStore';
 import { StatusBadge } from './StatusBadge';
+import { AgingBar } from './AgingBar';
 
 interface CaseDetailDrawerProps {
   caseId: string | null;
@@ -114,6 +99,16 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
       setCaseData(null);
     }
   }, [caseId]);
+
+  // Esc 關閉
+  useEffect(() => {
+    if (!caseId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [caseId, onClose]);
 
   if (!caseId) return null;
 
@@ -209,7 +204,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
         kind: '電子催告檔',
       });
       setUrl(url);
-      setFeedbackMsg({ type: 'success', text: `「${file.name}」已上傳至 Google 雲端，請按「儲存催告與終止紀錄」回寫試算表` });
+      setFeedbackMsg({ type: 'success', text: `「${file.name}」已上傳至 Google 雲端，請按「儲存 FA 紀錄」同步回試算表` });
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err.message || '檔案上傳失敗' });
     } finally {
@@ -217,15 +212,9 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
     }
   };
 
-  const renderFileField = (
-    kind: 'DEMAND_DOC',
-    label: string,
-    url: string,
-    setUrl: (url: string) => void,
-    accent: 'amber' | 'violet'
-  ) => (
-    <div>
-      <label className="block text-xs font-medium text-ink-700 mb-1">{label}</label>
+  const renderFileField = (kind: 'DEMAND_DOC', label: string, url: string, setUrl: (url: string) => void) => (
+    <div className="sm:col-span-2">
+      <label className="field-label">{label}</label>
       <div className="flex flex-wrap gap-2">
         <input
           type="url"
@@ -233,18 +222,12 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
           placeholder="上傳檔案，或貼上 Google 雲端連結"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          className="flex-1 min-w-0 text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100 font-mono"
+          className="field flex-1 !w-auto min-w-0"
         />
         {isFATeam && (
-          <label
-            className={`px-3 py-2 text-xs font-semibold rounded-lg flex items-center gap-1 cursor-pointer transition-colors ${
-              accent === 'amber'
-                ? 'text-amber-800 bg-amber-100 hover:bg-amber-200'
-                : 'text-violet-800 bg-violet-100 hover:bg-violet-200'
-            } ${uploadingKind ? 'opacity-50 pointer-events-none' : ''}`}
-          >
-            {uploadingKind === kind ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-            {uploadingKind === kind ? '上傳中...' : '上傳檔案'}
+          <label className={`btn btn-secondary ${uploadingKind ? 'opacity-50 pointer-events-none' : ''}`}>
+            {uploadingKind === kind ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {uploadingKind === kind ? '上傳中' : '上傳檔案'}
             <input
               type="file"
               className="hidden"
@@ -257,13 +240,8 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
           </label>
         )}
         {url && (
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="px-3 py-2 text-xs font-semibold text-ink-700 bg-ink-100 hover:bg-ink-200 rounded-lg flex items-center gap-1 transition-colors"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
+          <a href={url} target="_blank" rel="noreferrer" className="btn btn-ghost">
+            <ExternalLink className="w-4 h-4" />
             開啟
           </a>
         )}
@@ -271,87 +249,141 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
     </div>
   );
 
-  const dateInputCls =
-    'w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100';
+  const dateField = (label: string, value: string, set: (v: string) => void, enabled: boolean) => (
+    <div>
+      <label className="field-label">{label}</label>
+      <input type="date" disabled={!enabled} value={value} onChange={(e) => set(e.target.value)} className="field tabular-nums" />
+    </div>
+  );
+
+  const sectionHead = (title: string, hint: string, editable: boolean) => (
+    <div className="flex items-start justify-between gap-4 mb-5">
+      <div>
+        <h3 className="text-base font-bold text-ink-900">{title}</h3>
+        <p className="mt-0.5 text-[13px] text-ink-500">{hint}</p>
+      </div>
+      {!editable && <span className="flex-shrink-0 text-xs font-medium text-ink-500 bg-ink-100 rounded px-2 py-0.5">唯讀</span>}
+    </div>
+  );
+
+  const subHead = (dot: string, title: string, reached: boolean, reachedText: string) => (
+    <div className="flex items-center gap-2 mb-3">
+      <span className={`w-2 h-2 rounded-[3px] ${dot}`} />
+      <h4 className="text-sm font-semibold text-ink-900">{title}</h4>
+      {reached && <span className="text-xs font-medium text-ink-500">{reachedText}</span>}
+    </div>
+  );
+
+  const fmt = (d?: string | null, f = 'yyyy-MM-dd') => (d ? format(new Date(d), f) : '');
+
+  const infoItems: Array<{ label: string; value: string; wide?: boolean }> = caseData
+    ? [
+        { label: '電話', value: caseData.phone || '未提供' },
+        { label: 'Email', value: caseData.email || '未提供' },
+        ...(caseData.businessUnit === 'VALET'
+          ? [
+              { label: '服務類型', value: caseData.serviceType || '一般倉儲' },
+              { label: '地址', value: caseData.address || '未提供', wide: true },
+            ]
+          : []),
+        { label: '帳單日', value: fmt(caseData.billDate) || '未提供' },
+        { label: '開始催帳', value: fmt(caseData.collectionStartDate) || '尚未開始' },
+        { label: '最後匯入', value: fmt(caseData.lastImportedAt, 'yyyy-MM-dd HH:mm') },
+      ]
+    : [];
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-ink-950/45 backdrop-blur-xs flex justify-end animate-fade-in">
-      <div className="w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col border-l border-ink-200">
-        {/* Drawer Header */}
-        <div className="px-6 py-4 border-b border-ink-200 flex items-center justify-between bg-ink-50/80">
-          <div>
-            <div className="flex items-center gap-2">
-              <span
-                className={`px-2 py-0.5 rounded text-xs font-bold ${
-                  caseData?.businessUnit === 'VALET'
-                    ? 'bg-valet-100 text-valet-700'
-                    : 'bg-pepper-100 text-pepper-700'
-                }`}
-              >
-                {caseData?.businessUnit}
-              </span>
-              <h2 className="text-lg font-bold text-ink-900">
-                {caseData?.name || '載入中...'}
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="案件詳情">
+      <div className="absolute inset-0 bg-ink-950/40 animate-fade-in" onClick={onClose} aria-hidden />
+
+      <div className="relative w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col animate-slide-in">
+        {/* 標頭 */}
+        <div className="px-6 sm:px-8 pt-6 pb-5 border-b border-ink-200">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-ink-500 tabular-nums">
+                {caseData ? `${caseData.businessUnit === 'VALET' ? 'Valet' : 'Pepper'}  ${caseData.uid}` : ' '}
+              </div>
+              <h2 className="mt-0.5 text-xl font-bold tracking-tight text-ink-900 truncate">
+                {caseData?.name || '載入中'}
               </h2>
-              <span className="text-xs font-mono text-ink-500 bg-ink-200/70 px-2 py-0.5 rounded">
-                UID: {caseData?.uid}
-              </span>
             </div>
-            <div className="mt-1 flex items-center gap-3 text-xs text-ink-500">
-              {caseData && (
-                <>
-                  <StatusBadge stage={caseData.stage} isClosed={caseData.isClosed} />
-                  <span>逾期天數: <strong className="text-ink-800">{caseData.outstandingDays} 天</strong></span>
-                  <span>欠款金額: <strong className="text-red-600 font-semibold">${caseData.outstandingAmount.toLocaleString()}</strong></span>
-                </>
-              )}
-            </div>
+            <button onClick={onClose} aria-label="關閉" className="btn btn-ghost !p-1.5 -mr-1.5">
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl text-ink-400 hover:text-ink-600 hover:bg-ink-200/50 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+
+          {caseData && (
+            <>
+              <dl className="mt-5 grid grid-cols-3 gap-4">
+                <div>
+                  <dt className="text-xs text-ink-500">欠款</dt>
+                  <dd className="mt-0.5 text-lg font-bold text-ink-900 tabular-nums">${caseData.outstandingAmount.toLocaleString()}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-ink-500">逾期</dt>
+                  <dd className="mt-0.5 text-lg font-bold text-ink-900 tabular-nums">
+                    {caseData.outstandingDays}
+                    <span className="text-sm font-medium text-ink-500 ml-0.5">天</span>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-ink-500">階段</dt>
+                  <dd className="mt-1.5">
+                    <StatusBadge stage={caseData.stage} isClosed={caseData.isClosed} size="lg" />
+                  </dd>
+                </div>
+              </dl>
+              <div className="mt-4">
+                <AgingBar days={caseData.outstandingDays} isClosed={caseData.isClosed} className="!h-2" />
+                <div className="relative mt-1.5 h-4 text-2xs text-ink-400 tabular-nums">
+                  {[30, 50, 80, 95].map((t) => (
+                    <span key={t} className="absolute -translate-x-1/2" style={{ left: `${(t / 110) * 100}%` }}>
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Drawer Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* 內容 */}
+        <div className="flex-1 overflow-y-auto">
           {isLoading && (
-            <div className="py-20 flex flex-col items-center justify-center text-ink-400">
-              <Loader2 className="w-8 h-8 animate-spin text-brand-600 mb-2" />
-              <p className="text-sm">載入案件資料中...</p>
+            <div className="py-24 flex items-center justify-center gap-2 text-sm text-ink-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              載入案件資料
             </div>
           )}
 
           {feedbackMsg && (
             <div
-              className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
-                feedbackMsg.type === 'success'
-                  ? 'bg-brand-50 text-brand-700 border-brand-200'
-                  : 'bg-red-50 text-red-700 border-red-200'
+              role="status"
+              className={`mx-6 sm:mx-8 mt-6 px-4 py-3 rounded-lg text-[13px] font-medium flex items-start gap-2 ${
+                feedbackMsg.type === 'success' ? 'bg-brand-50 text-brand-800' : 'bg-red-50 text-red-800'
               }`}
             >
               {feedbackMsg.type === 'success' ? (
-                <CheckCircle className="w-4 h-4 text-brand-600" />
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
               ) : (
-                <AlertTriangle className="w-4 h-4 text-red-600" />
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               )}
               {feedbackMsg.text}
             </div>
           )}
 
           {caseData && (
-            <>
-              {/* 待確認是否結案提示 (未在最新每週報表中出現) */}
+            <div className="divide-y divide-ink-200">
+              {/* 待確認是否結案 */}
               {caseData.statusTag === 'PENDING_CONFIRMATION' && !caseData.isClosed && (
-                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start justify-between gap-3 animate-fade-in">
-                  <div className="flex items-start gap-2.5">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="px-6 sm:px-8 py-5 bg-amber-50 flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5 max-w-md">
+                    <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="text-xs font-bold text-amber-900">狀態：待確認是否結案</h4>
-                      <p className="text-xs text-amber-700 mt-0.5">
-                        本客戶未出現在本週最新匯入的 OutstandingReport 中，可能已完成補繳或銷帳。請 2C 催帳人員核對後調整結案狀態。
+                      <h4 className="text-sm font-semibold text-amber-950">可能已繳清</h4>
+                      <p className="text-[13px] text-amber-900/80 mt-0.5">
+                        這位客戶沒有出現在最新週報，可能已補繳或銷帳。核對無誤後請按確認結案。
                       </p>
                     </div>
                   </div>
@@ -370,7 +402,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                           setCaseData(res.case);
                           setIsClosed(true);
                           setClosedDate(today);
-                          setFeedbackMsg({ type: 'success', text: '已確認結案並即時回寫 Google 試算表！' });
+                          setFeedbackMsg({ type: 'success', text: '已結案，並同步回 Google 試算表。' });
                           if (onCaseUpdated) onCaseUpdated(res.case);
                         } catch (err: any) {
                           setFeedbackMsg({ type: 'error', text: err.message || '結案失敗' });
@@ -378,433 +410,175 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                           setIsSavingClose(false);
                         }
                       }}
-                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold whitespace-nowrap shadow-xs transition-colors flex-shrink-0"
+                      className="btn bg-amber-900 text-white hover:bg-amber-950"
                     >
-                      {isSavingClose ? '處理中...' : '確認結案'}
+                      {isSavingClose ? '處理中' : '確認結案'}
                     </button>
                   )}
                 </div>
               )}
 
-              {/* Section 1: Customer Info Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-ink-50 p-4 rounded-xl border border-ink-200/80">
-                <div>
-                  <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">聯絡電話</span>
-                  <span className="text-xs font-medium text-ink-800 flex items-center gap-1 mt-0.5">
-                    <Phone className="w-3.5 h-3.5 text-ink-400" />
-                    {caseData.phone || '無電話紀錄'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">電子信箱</span>
-                  <span className="text-xs font-medium text-ink-800 flex items-center gap-1 mt-0.5 truncate">
-                    <Mail className="w-3.5 h-3.5 text-ink-400" />
-                    {caseData.email || '無 Email'}
-                  </span>
-                </div>
+              {/* 客戶資料 */}
+              <section className="px-6 sm:px-8 py-6">
+                <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
+                  {infoItems.map((it) => (
+                    <div key={it.label} className={it.wide ? 'col-span-2' : ''}>
+                      <dt className="text-xs text-ink-500">{it.label}</dt>
+                      <dd className="mt-0.5 text-[13px] font-medium text-ink-900 break-words tabular-nums">{it.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
 
-                {/* Valet 專屬：服務類型 (Type of Service) */}
-                {caseData.businessUnit === 'VALET' && (
-                  <div>
-                    <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">服務類型 (Service)</span>
-                    <span className="text-xs font-medium text-ink-800 mt-0.5 block truncate">
-                      {caseData.serviceType || '一般倉儲'}
-                    </span>
-                  </div>
-                )}
-
-                {/* Valet 專屬：地址 (Address) */}
-                {caseData.businessUnit === 'VALET' && (
+              {/* 2C 勸導 */}
+              <form onSubmit={handleSave2C} className="px-6 sm:px-8 py-7">
+                {sectionHead('2C 勸導', '先用 Line 通知，聯絡不到再依序改用 Email、簡訊、電話。', is2CTeam)}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {dateField('Line 通知', lineNoticeDate, setLineNoticeDate, is2CTeam)}
+                  {dateField('Email 通知', emailNoticeDate, setEmailNoticeDate, is2CTeam)}
+                  {dateField('簡訊通知', smsNoticeDate, setSmsNoticeDate, is2CTeam)}
+                  {dateField('電話通知', phoneNoticeDate, setPhoneNoticeDate, is2CTeam)}
                   <div className="sm:col-span-2">
-                    <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">地址 (Address)</span>
-                    <span className="text-xs font-medium text-ink-800 mt-0.5 block truncate" title={caseData.address || ''}>
-                      {caseData.address || '未提供地址'}
-                    </span>
-                  </div>
-                )}
-
-                <div>
-                  <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">帳單/應繳日</span>
-                  <span className="text-xs font-medium text-ink-800 flex items-center gap-1 mt-0.5">
-                    <Calendar className="w-3.5 h-3.5 text-ink-400" />
-                    {caseData.billDate ? format(new Date(caseData.billDate), 'yyyy-MM-dd') : '未提供'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">催帳開始日</span>
-                  <span className="text-xs font-medium text-brand-700 flex items-center gap-1 mt-0.5">
-                    <Clock className="w-3.5 h-3.5 text-brand-500" />
-                    {caseData.collectionStartDate ? format(new Date(caseData.collectionStartDate), 'yyyy-MM-dd') : '尚未啟動'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">最後報表匯入</span>
-                  <span className="text-xs font-medium text-ink-600 mt-0.5 block">
-                    {format(new Date(caseData.lastImportedAt), 'yyyy-MM-dd HH:mm')}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[11px] font-semibold text-ink-400 uppercase tracking-wider block">結案狀態</span>
-                  <span className="text-xs font-medium text-ink-800 mt-0.5 block">
-                    {caseData.isClosed ? `已結案 (${caseData.closedDate ? format(new Date(caseData.closedDate), 'yyyy-MM-dd') : ''})` : '未結案進行中'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Section 2: 2C Team Collection Section */}
-              <form onSubmit={handleSave2C} className="bg-white p-5 rounded-2xl border border-brand-100 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-brand-50 pb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-brand-50 text-brand-600">
-                      <MessageSquare className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-ink-900">2C Team 催帳作業 (勸導期)</h3>
-                      <p className="text-[11px] text-ink-500">
-                        主要管道：<strong className="text-brand-600">Line</strong> ➜ 未聯繫到依序以 <strong>Email</strong> ➜ <strong>簡訊</strong> ➜ <strong>電話</strong> 通知
-                      </p>
-                    </div>
-                  </div>
-                  {!is2CTeam && (
-                    <span className="text-[11px] text-ink-400 bg-ink-100 px-2 py-0.5 rounded">唯讀檢視</span>
-                  )}
-                </div>
-
-                {/* 通知日期：Line ➜ Email ➜ 簡訊 ➜ 電話 */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-brand-50/40 p-3 rounded-xl border border-brand-100/60">
-                  <div>
-                    <label className="block text-xs font-semibold text-brand-950 mb-1">
-                      🟢 Line 通知日期 (主要通知)
-                    </label>
-                    <input
-                      type="date"
+                    <label className="field-label">處理方式與客戶回應</label>
+                    <textarea
+                      rows={3}
                       disabled={!is2CTeam}
-                      value={lineNoticeDate}
-                      onChange={(e) => setLineNoticeDate(e.target.value)}
-                      className="w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-ink-700 mb-1">
-                      📧 Email 通知日期
-                    </label>
-                    <input
-                      type="date"
-                      disabled={!is2CTeam}
-                      value={emailNoticeDate}
-                      onChange={(e) => setEmailNoticeDate(e.target.value)}
-                      className="w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-ink-700 mb-1">
-                      💬 簡訊通知日期
-                    </label>
-                    <input
-                      type="date"
-                      disabled={!is2CTeam}
-                      value={smsNoticeDate}
-                      onChange={(e) => setSmsNoticeDate(e.target.value)}
-                      className="w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-ink-700 mb-1">
-                      📞 電話通知日期
-                    </label>
-                    <input
-                      type="date"
-                      disabled={!is2CTeam}
-                      value={phoneNoticeDate}
-                      onChange={(e) => setPhoneNoticeDate(e.target.value)}
-                      className="w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100"
+                      placeholder="例如：客戶承諾月底前繳清、需轉交 FA 處理"
+                      value={twoCNotes}
+                      onChange={(e) => setTwoCNotes(e.target.value)}
+                      className="field resize-y"
                     />
                   </div>
                 </div>
-
-                {/* 2C Notes */}
-                <div>
-                  <label className="block text-xs font-medium text-ink-700 mb-1">
-                    2C 催帳詳細備註 <span className="text-ink-400 font-normal">(處理方式/客人回應)</span>
-                  </label>
-                  <textarea
-                    rows={2}
-                    disabled={!is2CTeam}
-                    placeholder="填寫客戶狀況、還款承諾或轉交 FA 注意事項..."
-                    value={twoCNotes}
-                    onChange={(e) => setTwoCNotes(e.target.value)}
-                    className="w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100"
-                  />
-                </div>
-
                 {is2CTeam && (
-                  <div className="flex justify-end pt-1">
-                    <button
-                      type="submit"
-                      disabled={isSaving2C}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-xl transition-all shadow-xs disabled:opacity-50"
-                    >
-                      {isSaving2C ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                      儲存 2C 催帳紀錄
+                  <div className="mt-5 flex justify-end">
+                    <button type="submit" disabled={isSaving2C} className="btn btn-primary">
+                      {isSaving2C && <Loader2 className="w-4 h-4 animate-spin" />}
+                      儲存 2C 紀錄
                     </button>
                   </div>
                 )}
               </form>
 
-              {/* Section 3: FA Team Legal & Demand Section */}
-              <form onSubmit={handleSaveFA} className="bg-white p-5 rounded-2xl border border-brand-100 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-brand-50 pb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-brand-50 text-brand-600">
-                      <ShieldAlert className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-ink-900">催告與終止作業</h3>
-                      <p className="text-[11px] text-ink-500">
-                        滿 50 天：<strong>催告期</strong> ➜ 滿 80 天：<strong>終止期</strong> ➜ 終止函 15 天未結案/滿95天：<strong>待 write-off</strong>
-                      </p>
-                    </div>
-                  </div>
-                  {!isFATeam && (
-                    <span className="text-[11px] text-ink-400 bg-ink-100 px-2 py-0.5 rounded">唯讀檢視</span>
-                  )}
-                </div>
+              {/* FA 催告與終止 */}
+              <form onSubmit={handleSaveFA} className="px-6 sm:px-8 py-7">
+                {sectionHead('FA 催告與終止', '滿 50 天發催告，滿 80 天發終止函；終止函寄出 15 天仍未結清即進入待 write-off。', isFATeam)}
 
-                {/* Demand Notice Fields (Stage 2) */}
-                <div className="p-3.5 rounded-xl bg-amber-50/50 border border-amber-200/70 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-amber-900 flex items-center gap-1">
-                      ⚠️ 第二階段：催告作業 (逾期滿 50 天)
-                    </span>
-                    {caseData.outstandingDays >= 50 && (
-                      <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                        已達催告標準
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-ink-700 mb-1">催告方式</label>
-                      <select
-                        disabled={!isFATeam}
-                        value={demandMethod}
-                        onChange={(e) => setDemandMethod(e.target.value as DemandMethod | '')}
-                        className={dateInputCls}
-                      >
-                        <option value="">請選擇</option>
-                        <option value="EMAIL">1. Email</option>
-                        <option value="CERTIFIED_LETTER">2. 存證信函</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-ink-700 mb-1">電子催告簡訊日期</label>
-                      <input
-                        type="date"
-                        disabled={!isFATeam}
-                        value={demandSmsDate}
-                        onChange={(e) => setDemandSmsDate(e.target.value)}
-                        className={dateInputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-ink-700 mb-1">催告日期</label>
-                      <input
-                        type="date"
-                        disabled={!isFATeam}
-                        value={demandNoticeDate}
-                        onChange={(e) => setDemandNoticeDate(e.target.value)}
-                        className={dateInputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-ink-700 mb-1">催告到期日</label>
-                      <input
-                        type="date"
-                        disabled={!isFATeam}
-                        value={demandDueDate}
-                        onChange={(e) => setDemandDueDate(e.target.value)}
-                        className={dateInputCls}
-                      />
+                <div className="space-y-7">
+                  <div>
+                    {subHead('bg-stage-2', '催告', caseData.outstandingDays >= 50, '已滿 50 天')}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="field-label">催告方式</label>
+                        <select
+                          disabled={!isFATeam}
+                          value={demandMethod}
+                          onChange={(e) => setDemandMethod(e.target.value as DemandMethod | '')}
+                          className="field"
+                        >
+                          <option value="">請選擇</option>
+                          <option value="EMAIL">Email</option>
+                          <option value="CERTIFIED_LETTER">存證信函</option>
+                        </select>
+                      </div>
+                      {dateField('催告簡訊日期', demandSmsDate, setDemandSmsDate, isFATeam)}
+                      {dateField('催告日期', demandNoticeDate, setDemandNoticeDate, isFATeam)}
+                      {dateField('催告到期日', demandDueDate, setDemandDueDate, isFATeam)}
+                      {renderFileField('DEMAND_DOC', '電子催告檔', demandDocUrl, setDemandDocUrl)}
                     </div>
                   </div>
 
-                  {renderFileField('DEMAND_DOC', '電子催告檔', demandDocUrl, setDemandDocUrl, 'amber')}
-                </div>
-
-                {/* Termination Notice Fields (Stage 3 & 4) */}
-                <div className="p-3.5 rounded-xl bg-rose-50/50 border border-rose-200/70 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-rose-900 flex items-center gap-1">
-                      🛑 第三階段：終止期 (逾期滿 80 天)
-                    </span>
-                    {caseData.outstandingDays >= 80 && (
-                      <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
-                        已達終止標準
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-ink-700 mb-1">終止簡訊通知</label>
-                      <input
-                        type="date"
-                        disabled={!isFATeam}
-                        value={terminationSmsDate}
-                        onChange={(e) => setTerminationSmsDate(e.target.value)}
-                        className={dateInputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-ink-700 mb-1">終止函發送日期</label>
-                      <input
-                        type="date"
-                        disabled={!isFATeam}
-                        value={terminationNoticeDate}
-                        onChange={(e) => setTerminationNoticeDate(e.target.value)}
-                        className={dateInputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-ink-700 mb-1">到期日期</label>
-                      <input
-                        type="date"
-                        disabled={!isFATeam}
-                        value={terminationDueDate}
-                        onChange={(e) => setTerminationDueDate(e.target.value)}
-                        className={dateInputCls}
-                      />
+                  <div>
+                    {subHead('bg-stage-3', '終止', caseData.outstandingDays >= 80, '已滿 80 天')}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {dateField('終止簡訊日期', terminationSmsDate, setTerminationSmsDate, isFATeam)}
+                      {dateField('終止函寄出日期', terminationNoticeDate, setTerminationNoticeDate, isFATeam)}
+                      {dateField('終止到期日', terminationDueDate, setTerminationDueDate, isFATeam)}
                     </div>
                   </div>
-                  <p className="text-[11px] text-rose-700/80">終止函發送後 15 天未結案，自動進入待 write-off</p>
-                </div>
 
-                {/* FA Notes */}
-                <div>
-                  <label className="block text-xs font-medium text-ink-700 mb-1">
-                    FA 法務/財務備註
-                  </label>
-                  <textarea
-                    rows={2}
-                    disabled={!isFATeam}
-                    placeholder="存證信函編號、法院支付命令進度或呆帳沖銷評估..."
-                    value={faNotes}
-                    onChange={(e) => setFaNotes(e.target.value)}
-                    className="w-full text-xs rounded-lg border-ink-300 bg-white px-3 py-2 border shadow-xs focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400 disabled:bg-ink-100"
-                  />
-                </div>
+                  <div>
+                    {subHead('bg-ink-400', '存證信函', false, '')}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {dateField('寄出日期', certifiedLetterSentDate, setCertifiedLetterSentDate, isFATeam)}
+                      {dateField('收件日期', certifiedLetterReceivedDate, setCertifiedLetterReceivedDate, isFATeam)}
+                    </div>
+                  </div>
 
-                {/* 存證信函 */}
-                <div className="p-3.5 rounded-xl bg-violet-50/50 border border-violet-200/70 space-y-3">
-                  <span className="text-xs font-bold text-violet-900 flex items-center gap-1">
-                    <FileText className="w-3.5 h-3.5" />
-                    存證信函
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-ink-700 mb-1">發送日期</label>
-                      <input
-                        type="date"
-                        disabled={!isFATeam}
-                        value={certifiedLetterSentDate}
-                        onChange={(e) => setCertifiedLetterSentDate(e.target.value)}
-                        className={dateInputCls}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-ink-700 mb-1">收件日期</label>
-                      <input
-                        type="date"
-                        disabled={!isFATeam}
-                        value={certifiedLetterReceivedDate}
-                        onChange={(e) => setCertifiedLetterReceivedDate(e.target.value)}
-                        className={dateInputCls}
-                      />
-                    </div>
+                  <div>
+                    <label className="field-label">FA 備註</label>
+                    <textarea
+                      rows={3}
+                      disabled={!isFATeam}
+                      placeholder="例如：存證信函編號、支付命令進度、沖銷評估"
+                      value={faNotes}
+                      onChange={(e) => setFaNotes(e.target.value)}
+                      className="field resize-y"
+                    />
                   </div>
                 </div>
 
                 {isFATeam && (
-                  <div className="flex justify-end pt-1">
-                    <button
-                      type="submit"
-                      disabled={isSavingFA}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-xl transition-all shadow-xs disabled:opacity-50"
-                    >
-                      {isSavingFA ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                      儲存催告與終止紀錄
+                  <div className="mt-5 flex justify-end">
+                    <button type="submit" disabled={isSavingFA} className="btn btn-primary">
+                      {isSavingFA && <Loader2 className="w-4 h-4 animate-spin" />}
+                      儲存 FA 紀錄
                     </button>
                   </div>
                 )}
               </form>
 
-              {/* Section 4: Case Closure */}
-              <form onSubmit={handleSaveClose} className="bg-ink-50 p-4 rounded-2xl border border-ink-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className={`w-5 h-5 ${isClosed ? 'text-brand-600' : 'text-ink-400'}`} />
-                    <div>
-                      <h4 className="text-xs font-bold text-ink-900">結案狀態設定</h4>
-                      <p className="text-[11px] text-ink-500">客戶繳清款項或完成沖銷時結案</p>
-                    </div>
+              {/* 結案 */}
+              <form onSubmit={handleSaveClose} className="px-6 sm:px-8 py-7">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-base font-bold text-ink-900">結案</h3>
+                    <p className="mt-0.5 text-[13px] text-ink-500">
+                      {isClosed
+                        ? `結案日期 ${caseData.isClosed && closedDate ? closedDate : `${todayStr()}（儲存時帶入今天）`}`
+                        : '客戶繳清或完成沖銷後開啟。'}
+                    </p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
+                  <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
                     <input
                       type="checkbox"
                       checked={isClosed}
                       onChange={(e) => setIsClosed(e.target.checked)}
                       className="sr-only peer"
+                      aria-label="已結案"
                     />
-                    <div className="w-11 h-6 bg-ink-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-ink-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
+                    <div className="w-10 h-6 bg-ink-200 rounded-full transition-colors peer-checked:bg-brand-600 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-400 peer-focus-visible:ring-offset-2 after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:rounded-full after:h-4 after:w-4 after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
                   </label>
                 </div>
-
-                {isClosed && (
-                  <div className="pt-2 border-t border-ink-200/80 flex items-center gap-2 text-xs text-ink-700">
-                    <span className="font-medium">結案日期:</span>
-                    <span className="font-mono">
-                      {caseData.isClosed && closedDate ? closedDate : `${todayStr()}（儲存時自動帶入當天）`}
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="submit"
-                    disabled={isSavingClose}
-                    className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-ink-700 bg-white hover:bg-ink-100 border border-ink-300 rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    {isSavingClose ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                    更新結案狀態
+                <div className="mt-5 flex justify-end">
+                  <button type="submit" disabled={isSavingClose} className="btn btn-secondary">
+                    {isSavingClose && <Loader2 className="w-4 h-4 animate-spin" />}
+                    儲存結案狀態
                   </button>
                 </div>
               </form>
 
-              {/* Section 5: Audit Logs */}
+              {/* 異動紀錄 */}
               {caseData.auditLogs && caseData.auditLogs.length > 0 && (
-                <div className="bg-ink-50/70 p-4 rounded-2xl border border-ink-200/80 space-y-2">
-                  <h4 className="text-xs font-bold text-ink-800 flex items-center gap-1.5">
-                    <History className="w-4 h-4 text-ink-500" />
-                    操作異動歷程 ({caseData.auditLogs.length})
-                  </h4>
-                  <div className="divide-y divide-ink-200/60 max-h-40 overflow-y-auto pr-1 text-xs text-ink-600 space-y-2">
+                <section className="px-6 sm:px-8 py-7">
+                  <h3 className="text-base font-bold text-ink-900 mb-4">異動紀錄</h3>
+                  <ol className="space-y-4">
                     {caseData.auditLogs.map((log) => (
-                      <div key={log.id} className="pt-2 first:pt-0 flex items-start justify-between">
+                      <li key={log.id} className="grid grid-cols-[5.5rem_1fr] gap-3 text-[13px]">
+                        <time className="text-xs text-ink-500 tabular-nums pt-0.5">{fmt(log.createdAt, 'MM/dd HH:mm')}</time>
                         <div>
-                          <span className="font-semibold text-ink-800">{log.user?.name || '使用者'}</span>
-                          <span className="text-ink-400 text-[10px] ml-1.5">({log.action})</span>
-                          <p className="text-[11px] text-ink-500 mt-0.5 line-clamp-2">{log.details}</p>
+                          <div className="text-ink-900">
+                            <span className="font-semibold">{log.user?.name || '使用者'}</span>
+                            <span className="text-ink-500 ml-1.5">{log.action}</span>
+                          </div>
+                          <p className="mt-0.5 text-ink-600 line-clamp-2">{log.details}</p>
                         </div>
-                        <span className="text-[10px] text-ink-400 whitespace-nowrap">
-                          {format(new Date(log.createdAt), 'MM/dd HH:mm')}
-                        </span>
-                      </div>
+                      </li>
                     ))}
-                  </div>
-                </div>
+                  </ol>
+                </section>
               )}
-            </>
+            </div>
           )}
         </div>
       </div>

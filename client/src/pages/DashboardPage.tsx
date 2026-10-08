@@ -1,16 +1,10 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  DollarSign,
-  AlertCircle,
-  FileCheck,
-  RefreshCw,
-  Clock,
-  ChevronRight,
-} from 'lucide-react';
+import { RefreshCw, Upload } from 'lucide-react';
 import type { BusinessUnit } from '../types';
 import { dashboardApi } from '../api';
-import { MetricCard } from '../components/MetricCard';
+import { useAuth } from '../context/AuthContext';
+import { STAGES, stageMeta } from '../components/stage';
 
 interface DashboardPageProps {
   businessUnit: BusinessUnit;
@@ -19,292 +13,223 @@ interface DashboardPageProps {
   onOpenUpload: () => void;
 }
 
+const money = (n: number) => `$${n.toLocaleString()}`;
+
+/** 升級階梯只顯示未結案的五個階段 */
+const LADDER = STAGES.filter((s) => s.code !== 'CLOSED');
+
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   businessUnit,
-  onSelectBusinessUnit,
   onNavigateToCases,
   onOpenUpload,
 }) => {
+  const { is2CTeam } = useAuth();
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['dashboard-overview', businessUnit],
     queryFn: () => dashboardApi.getOverview(businessUnit),
   });
 
-  const isValet = businessUnit === 'VALET';
+  const unitName = businessUnit === 'VALET' ? 'Valet' : 'Pepper';
+  const kpi = data?.kpiSummary;
+  const breakdown = kpi?.stageBreakdown ?? {};
+  const outstanding = kpi?.totalOutstandingAmount ?? 0;
 
   return (
-    <div className="space-y-8 animate-fade-in pb-12">
-      {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-ink-200 shadow-xs">
+    <div className="space-y-10 animate-fade-in">
+      {/* 頁首 */}
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
-            <span
-              className={`text-xl font-black uppercase tracking-wider px-3 py-1 rounded-lg ${
-                isValet
-                  ? 'bg-valet-50 text-valet-600 border border-valet-200'
-                  : 'bg-pepper-50 text-pepper-600 border border-pepper-200'
-              }`}
-            >
-              {businessUnit}
-            </span>
-            <h1 className="text-xl font-bold text-ink-900">
-              呆帳催款總覽看板
-            </h1>
-          </div>
-          <p className="text-xs text-ink-500 mt-1">
-            依照每週 Outstanding Report 匯入天數與催帳開始月份自動彙整（追蹤近 3 個月與歷史累計數據）
+          <h1 className="text-2xl font-bold tracking-tight text-ink-900">{unitName} 呆帳總覽</h1>
+          <p className="mt-1 text-sm text-ink-500">
+            {data?.referenceDate ? `依 ${data.referenceDate} 匯入的週報計算` : '依最新匯入的週報計算'}
           </p>
         </div>
-
-        {/* Business Unit Segmented Control */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center bg-ink-100 p-1 rounded-xl border border-ink-200">
-            <button
-              onClick={() => onSelectBusinessUnit('VALET')}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                isValet
-                  ? 'bg-valet-600 text-white shadow-sm'
-                  : 'text-ink-600 hover:text-ink-900'
-              }`}
-            >
-              Valet 總覽
-            </button>
-            <button
-              onClick={() => onSelectBusinessUnit('PEPPER')}
-              className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
-                !isValet
-                  ? 'bg-pepper-600 text-white shadow-sm'
-                  : 'text-ink-600 hover:text-ink-900'
-              }`}
-            >
-              Pepper 總覽
-            </button>
-          </div>
-
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            title="重新整理資料"
-            className="p-2.5 rounded-xl border border-ink-200 bg-white text-ink-500 hover:text-ink-700 hover:bg-ink-50 transition-colors disabled:opacity-50 shadow-xs"
-          >
-            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-brand-600' : ''}`} />
+        <div className="flex items-center gap-2">
+          <button onClick={() => refetch()} disabled={isFetching} className="btn btn-ghost">
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+            重新整理
           </button>
+          {is2CTeam && (
+            <button onClick={onOpenUpload} className="btn btn-secondary sm:hidden">
+              <Upload className="w-4 h-4" />
+              上傳週報
+            </button>
+          )}
         </div>
-      </div>
+      </header>
 
-      {/* KPI Cards */}
-      {data && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <MetricCard
-            title="當前未結案呆帳總額"
-            value={`$${data.kpiSummary.totalOutstandingAmount.toLocaleString()}`}
-            subValue={`${data.kpiSummary.activeCases} 人欠款中`}
-            icon={<DollarSign className="w-5 h-5 text-red-600" />}
-            colorClass="text-red-600"
-            badge="進行中"
-          />
-
-          <MetricCard
-            title="第二/三/四階段 催告與終止"
-            value={`${(data.kpiSummary.stageBreakdown['STAGE_2']?.count || 0) + (data.kpiSummary.stageBreakdown['STAGE_3']?.count || 0) + (data.kpiSummary.stageBreakdown['STAGE_4']?.count || 0)} 人`}
-            subValue={`$${((data.kpiSummary.stageBreakdown['STAGE_2']?.amount || 0) + (data.kpiSummary.stageBreakdown['STAGE_3']?.amount || 0) + (data.kpiSummary.stageBreakdown['STAGE_4']?.amount || 0)).toLocaleString()}`}
-            icon={<AlertCircle className="w-5 h-5 text-amber-600" />}
-            colorClass="text-amber-600"
-            badge="FA 重點處理"
-          />
-
-          <MetricCard
-            title="待 Write-off 案件"
-            value={`${data.kpiSummary.stageBreakdown['STAGE_4']?.count || 0} 人`}
-            subValue={`$${(data.kpiSummary.stageBreakdown['STAGE_4']?.amount || 0).toLocaleString()}`}
-            icon={<Clock className="w-5 h-5 text-purple-600" />}
-            colorClass="text-purple-600"
-            badge="逾期滿95天/終止滿15天"
-          />
-
-          <MetricCard
-            title="已結案金額 (歷史+近期)"
-            value={`$${data.kpiSummary.totalClosedAmount.toLocaleString()}`}
-            subValue={`${data.kpiSummary.closedCases} 人已結案`}
-            icon={<FileCheck className="w-5 h-5 text-brand-600" />}
-            colorClass="text-brand-700"
-            badge="回收成功"
-          />
-        </div>
-      )}
-
-      {/* Matrix Dashboard Table (Matching User Screenshot Layout) */}
-      <div className="bg-white rounded-2xl border border-ink-200 shadow-sm overflow-hidden">
-        {/* Table Title Bar */}
-        <div
-          className={`px-6 py-4 flex items-center justify-between border-b ${
-            isValet ? 'bg-valet-50/70 border-valet-200' : 'bg-pepper-50/70 border-pepper-200'
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <span
-              className={`text-xl font-extrabold lowercase tracking-tight ${
-                isValet ? 'text-valet-600' : 'text-pepper-700'
-              }`}
-            >
-              {businessUnit.toLowerCase()}
-            </span>
-            <span className="text-xs text-ink-500 font-medium hidden sm:inline">
-              呆帳統計矩陣 (點擊任一數值可直接跳轉篩選清單)
-            </span>
+      {/* 總額 + 升級階梯 */}
+      <section className="panel overflow-hidden" aria-label="各階段欠款">
+        <div className="p-6 sm:p-8 flex flex-wrap items-end gap-x-14 gap-y-6">
+          <div>
+            <div className="text-sm font-medium text-ink-500">未結案欠款</div>
+            <div className="mt-1 text-[40px] leading-none font-bold tracking-tight text-ink-900 tabular-nums">
+              {isLoading ? '—' : money(outstanding)}
+            </div>
+            <div className="mt-2 text-sm text-ink-500">{kpi ? `${kpi.activeCases} 位客戶尚未結清` : ' '}</div>
           </div>
+          <div>
+            <div className="text-sm font-medium text-ink-500">已回收</div>
+            <div className="mt-1 text-2xl font-bold tracking-tight text-brand-700 tabular-nums">
+              {isLoading ? '—' : money(kpi?.totalClosedAmount ?? 0)}
+            </div>
+            <div className="mt-1.5 text-sm text-ink-500">{kpi ? `${kpi.closedCases} 位已結案` : ' '}</div>
+          </div>
+        </div>
 
-          <button
-            onClick={() => onNavigateToCases()}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-ink-700 hover:text-ink-900 bg-white px-3 py-1.5 rounded-lg border border-ink-200 shadow-xs hover:bg-ink-50 transition-colors"
-          >
-            檢視全部案件清單
-            <ChevronRight className="w-3.5 h-3.5" />
+        {/* 欠款分布：依金額比例 */}
+        <div className="px-6 sm:px-8">
+          <div className="flex h-2.5 rounded-full overflow-hidden bg-ink-100 gap-px">
+            {outstanding > 0 &&
+              LADDER.map((s) => {
+                const amt = breakdown[s.code]?.amount ?? 0;
+                if (!amt) return null;
+                return (
+                  <div
+                    key={s.code}
+                    className={s.bar}
+                    style={{ width: `${(amt / outstanding) * 100}%` }}
+                    title={`${s.name} ${money(amt)}`}
+                  />
+                );
+              })}
+          </div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 sm:grid-cols-5 [&>*:last-child]:col-span-2 sm:[&>*:last-child]:col-span-1 gap-px bg-ink-200 border-t border-ink-200">
+          {LADDER.map((s) => {
+            const b = breakdown[s.code] ?? { count: 0, amount: 0 };
+            const empty = b.count === 0;
+            return (
+              <button
+                key={s.code}
+                onClick={() => onNavigateToCases({ stage: s.code })}
+                className="group text-left p-5 sm:p-6 bg-white hover:bg-ink-50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-[3px] ${s.dot}`} />
+                  <span className="text-sm font-semibold text-ink-900">{s.name}</span>
+                  {s.owner && <span className="ml-auto text-xs font-medium text-ink-400">{s.owner}</span>}
+                </div>
+                <div className="mt-0.5 text-xs text-ink-500">{s.threshold}</div>
+                <div className={`mt-4 text-2xl font-bold tabular-nums ${empty ? 'text-ink-300' : 'text-ink-900'}`}>
+                  {b.count}
+                  <span className="text-sm font-medium text-ink-400 ml-1">人</span>
+                </div>
+                <div className={`text-[13px] tabular-nums ${empty ? 'text-ink-300' : 'text-ink-600'}`}>{money(b.amount)}</div>
+                <div className="mt-3 text-xs font-semibold text-brand-700 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                  查看案件
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 月份明細 */}
+      <section className="space-y-4" aria-labelledby="matrix-title">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 id="matrix-title" className="text-lg font-bold tracking-tight text-ink-900">依催帳開始月份</h2>
+            <p className="mt-0.5 text-sm text-ink-500">點擊金額或人數，查看該月份、該階段的案件。</p>
+          </div>
+          <button onClick={() => onNavigateToCases()} className="btn btn-secondary">
+            查看全部案件
           </button>
         </div>
 
-        {/* Matrix Table */}
-        <div className="overflow-x-auto">
+        <div className="panel overflow-x-auto">
           {isLoading ? (
-            <div className="py-24 text-center text-ink-400">
-              <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-brand-600" />
-              <p className="text-sm">載入總覽統計數據中...</p>
+            <div className="py-20 flex items-center justify-center gap-2 text-sm text-ink-500">
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              載入統計資料
             </div>
           ) : data ? (
-            <table className="w-full text-left border-collapse">
-              {/* Table Header */}
+            <table className="w-full text-[13px] border-collapse tabular-nums">
               <thead>
-                {/* Top header row with Month Buckets */}
-                <tr className="bg-brand-700 text-white text-xs font-bold">
-                  <th className="py-3 px-4 w-56 italic font-semibold text-brand-100 border-r border-brand-600">
-                    status
+                <tr className="text-ink-900">
+                  <th rowSpan={2} className="sticky left-0 z-10 bg-white text-left align-bottom font-semibold py-3 px-5 min-w-52 border-b border-ink-200">
+                    階段
                   </th>
                   {data.timeBuckets.map((bucket) => (
                     <th
                       key={bucket.key}
                       colSpan={3}
-                      className={`py-2.5 px-3 text-center border-r border-brand-600 last:border-r-0 ${
-                        bucket.isTotal ? 'bg-brand-800 font-extrabold' : ''
+                      className={`pt-4 pb-1 px-3 text-center font-semibold border-l border-ink-100 ${
+                        bucket.isTotal ? 'bg-ink-50' : ''
                       }`}
                     >
-                      <span className="text-sm font-bold block">{bucket.label}</span>
+                      {bucket.label}
                     </th>
                   ))}
                 </tr>
-
-                {/* Sub-header row with metrics ($總額, 人數, ttl. %) */}
-                <tr className="bg-brand-50 text-brand-800 text-[11px] font-semibold uppercase tracking-wide border-b border-brand-200">
-                  <th className="py-2 px-4 border-r border-brand-200 bg-brand-100/60"></th>
+                <tr className="text-xs text-ink-500 border-b border-ink-200">
                   {data.timeBuckets.map((bucket) => (
                     <React.Fragment key={bucket.key}>
-                      <th className="py-2 px-3 text-right font-bold w-28">
-                        $總額
-                      </th>
-                      <th className="py-2 px-2 text-center font-bold w-16">
-                        人數
-                      </th>
-                      <th className="py-2 px-2 text-right font-bold w-16 border-r border-brand-200">
-                        ttl. %
-                      </th>
+                      <th className={`pb-2.5 px-3 text-right font-medium border-l border-ink-100 ${bucket.isTotal ? 'bg-ink-50' : ''}`}>金額</th>
+                      <th className={`pb-2.5 px-2 text-right font-medium ${bucket.isTotal ? 'bg-ink-50' : ''}`}>人數</th>
+                      <th className={`pb-2.5 pl-2 pr-3 text-right font-medium ${bucket.isTotal ? 'bg-ink-50' : ''}`}>占比</th>
                     </React.Fragment>
                   ))}
                 </tr>
               </thead>
 
-              {/* Table Body */}
-              <tbody className="divide-y divide-ink-200 text-xs text-ink-800 font-medium">
-                {data.rows.map((row, rIdx) => (
-                  <tr
-                    key={row.key}
-                    className={`transition-colors ${
-                      rIdx % 2 === 0 ? 'bg-white' : 'bg-ink-50/70'
-                    } hover:bg-brand-50`}
-                  >
-                    {/* Row Label */}
-                    <td className="py-3 px-4 font-semibold text-ink-800 border-r border-ink-200 whitespace-nowrap">
-                      {row.label}
-                    </td>
+              <tbody className="text-ink-800">
+                {data.rows.map((row) => {
+                  const meta = stageMeta(row.stageCode);
+                  return (
+                    <tr key={row.key} className="border-b border-ink-100 hover:bg-ink-50/60 transition-colors">
+                      <td className="sticky left-0 z-10 bg-white py-3 px-5 whitespace-nowrap">
+                        <span className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-[3px] ${meta.dot}`} />
+                          <span className="font-semibold text-ink-900">{meta.name}</span>
+                          <span className="text-xs text-ink-400">{meta.threshold}</span>
+                        </span>
+                      </td>
 
-                    {/* Bucket Columns */}
-                    {data.timeBuckets.map((bucket) => {
-                      const metric = row.buckets[bucket.key] || {
-                        amount: 0,
-                        count: 0,
-                        percentage: 0,
-                        percentageStr: '0.00%',
-                      };
-                      const hasValue = metric.count > 0 || metric.amount > 0;
+                      {data.timeBuckets.map((bucket) => {
+                        const metric = row.buckets[bucket.key] || { amount: 0, count: 0, percentage: 0, percentageStr: '0.00%' };
+                        const hasValue = metric.count > 0 || metric.amount > 0;
+                        const go = () =>
+                          hasValue &&
+                          onNavigateToCases({
+                            stage: row.stageCode,
+                            monthBucket: bucket.key !== 'total' ? bucket.key : undefined,
+                          });
+                        const linkCls = hasValue
+                          ? 'cursor-pointer font-semibold text-ink-900 hover:text-brand-700 hover:underline underline-offset-4 decoration-brand-300'
+                          : 'text-ink-300';
+                        const bg = bucket.isTotal ? 'bg-ink-50/70' : '';
 
-                      return (
-                        <React.Fragment key={bucket.key}>
-                          <td
-                            onClick={() =>
-                              hasValue &&
-                              onNavigateToCases({
-                                stage: row.stageCode,
-                                monthBucket: bucket.key !== 'total' ? bucket.key : undefined,
-                              })
-                            }
-                            className={`py-3 px-3 text-right font-mono ${
-                              hasValue
-                                ? 'cursor-pointer font-semibold text-ink-900 hover:text-brand-600 hover:underline decoration-brand-300 underline-offset-2'
-                                : 'text-ink-400'
-                            }`}
-                          >
-                            {hasValue ? metric.amount.toLocaleString() : ''}
-                          </td>
-                          <td
-                            onClick={() =>
-                              hasValue &&
-                              onNavigateToCases({
-                                stage: row.stageCode,
-                                monthBucket: bucket.key !== 'total' ? bucket.key : undefined,
-                              })
-                            }
-                            className={`py-3 px-2 text-center ${
-                              hasValue
-                                ? 'cursor-pointer font-semibold text-ink-900 hover:text-brand-600 hover:underline decoration-brand-300 underline-offset-2'
-                                : 'text-ink-400'
-                            }`}
-                          >
-                            {hasValue ? metric.count : ''}
-                          </td>
-                          <td
-                            className={`py-3 px-2 text-right font-mono border-r border-ink-200 ${
-                              hasValue ? 'font-medium text-ink-500' : 'text-ink-300'
-                            }`}
-                          >
-                            {hasValue ? metric.percentageStr : ''}
-                          </td>
-                        </React.Fragment>
-                      );
-                    })}
-                  </tr>
-                ))}
+                        return (
+                          <React.Fragment key={bucket.key}>
+                            <td onClick={go} className={`py-3 px-3 text-right border-l border-ink-100 ${linkCls} ${bg}`}>
+                              {hasValue ? metric.amount.toLocaleString() : '–'}
+                            </td>
+                            <td onClick={go} className={`py-3 px-2 text-right ${linkCls} ${bg}`}>
+                              {hasValue ? metric.count : '–'}
+                            </td>
+                            <td className={`py-3 pl-2 pr-3 text-right text-xs ${hasValue ? 'text-ink-500' : 'text-ink-300'} ${bg}`}>
+                              {hasValue ? metric.percentageStr : ''}
+                            </td>
+                          </React.Fragment>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
 
-                {/* Totals Row (Matching image double bottom border & bold total) */}
-                <tr className="bg-brand-50 text-brand-900 font-bold border-t-2 border-brand-500 text-xs">
-                  <td className="py-3.5 px-4 font-black text-brand-900 border-r border-brand-200 text-sm">
-                    {data.totalsRow.label}
-                  </td>
+                <tr className="font-bold text-ink-900 border-t-2 border-ink-300">
+                  <td className="sticky left-0 z-10 bg-white py-3.5 px-5">合計</td>
                   {data.timeBuckets.map((bucket) => {
-                    const metric = data.totalsRow.buckets[bucket.key] || {
-                      amount: 0,
-                      count: 0,
-                      percentage: 0,
-                      percentageStr: '0.00%',
-                    };
-
+                    const metric = data.totalsRow.buckets[bucket.key] || { amount: 0, count: 0, percentage: 0, percentageStr: '0.00%' };
+                    const bg = bucket.isTotal ? 'bg-ink-50/70' : '';
                     return (
                       <React.Fragment key={bucket.key}>
-                        <td className="py-3 px-3 text-right font-mono font-black text-sm">
-                          {metric.amount > 0 ? metric.amount.toLocaleString() : '0'}
-                        </td>
-                        <td className="py-3 px-2 text-center font-black text-sm">
-                          {metric.count > 0 ? metric.count : '0'}
-                        </td>
-                        <td className="py-3 px-2 text-right font-mono font-black text-xs border-r border-brand-200">
-                          {metric.amount > 0 ? '100.00%' : '0.00%'}
+                        <td className={`py-3.5 px-3 text-right border-l border-ink-100 ${bg}`}>{metric.amount.toLocaleString()}</td>
+                        <td className={`py-3.5 px-2 text-right ${bg}`}>{metric.count}</td>
+                        <td className={`py-3.5 pl-2 pr-3 text-right text-xs font-medium text-ink-500 ${bg}`}>
+                          {metric.amount > 0 ? '100%' : ''}
                         </td>
                       </React.Fragment>
                     );
@@ -312,27 +237,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 </tr>
               </tbody>
             </table>
-          ) : null}
+          ) : (
+            <div className="py-20 text-center text-sm text-ink-500">
+              尚無資料。上傳第一份週報後，這裡會依月份列出各階段的欠款。
+            </div>
+          )}
         </div>
-
-        {/* Footer info & stages explanation */}
-        <div className="p-4 bg-ink-50/70 border-t border-ink-200 text-xs text-ink-600 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-4">
-            <span className="font-semibold text-ink-700">催帳階段定義：</span>
-            <span>• <strong>滿 30 天</strong>：第 1 階段 勸導期 (2C)</span>
-            <span>• <strong>滿 50 天</strong>：第 2 階段 催告期 (FA)</span>
-            <span>• <strong>滿 80 天</strong>：第 3 階段 終止期 (FA)</span>
-            <span>• <strong>滿 95 天/終止函發送滿15天</strong>：第 4 階段 待 write-off</span>
-          </div>
-
-          <button
-            onClick={onOpenUpload}
-            className="text-brand-700 hover:text-brand-900 font-semibold inline-flex items-center gap-1"
-          >
-            上傳最新週報更新數據 ➜
-          </button>
-        </div>
-      </div>
+      </section>
     </div>
   );
 };

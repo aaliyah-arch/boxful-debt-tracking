@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { AlertCircle, ArrowRight, Sparkles } from 'lucide-react';
+import { AlertCircle, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import type { Role } from '../types';
+import { Logo } from '../components/Logo';
 
 export const LoginPage: React.FC = () => {
   const { devLogin, loginWithFirebaseGoogle, isFirebaseConfigured } = useAuth();
@@ -33,56 +34,79 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-brand-800 via-brand-900 to-ink-950 flex items-center justify-center p-4">
-      {/* Decorative glows */}
-      <div aria-hidden className="pointer-events-none absolute -top-32 -left-32 w-[28rem] h-[28rem] rounded-full bg-brand-400/30 blur-3xl" />
-      <div aria-hidden className="pointer-events-none absolute -bottom-40 -right-24 w-[32rem] h-[32rem] rounded-full bg-brand-300/15 blur-3xl" />
-      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:radial-gradient(white_1px,transparent_1px)] [background-size:22px_22px]" />
+  const ladder = [
+    { day: '30', name: '勸導', h: 'h-10', color: 'bg-stage-1' },
+    { day: '50', name: '催告', h: 'h-16', color: 'bg-stage-2' },
+    { day: '80', name: '終止', h: 'h-24', color: 'bg-stage-3' },
+    { day: '95', name: 'write-off', h: 'h-32', color: 'bg-stage-4' },
+  ];
 
-      <div className="relative max-w-md w-full bg-white rounded-3xl shadow-2xl shadow-ink-950/40 ring-1 ring-white/10 overflow-hidden p-8 space-y-6 animate-fade-in">
-        {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-white mx-auto flex items-center justify-center font-black text-2xl shadow-lg shadow-brand-500/30 ring-1 ring-inset ring-white/20">
-            ZP
-          </div>
-          <h1 className="text-2xl font-black text-ink-900 tracking-tight">
-            呆帳催款追蹤管理系統
-          </h1>
-          <p className="text-xs text-ink-500 font-medium">
-            2C Team 與 FA 共同協作追蹤平台
-          </p>
+  const demoRoles: Array<{ role: Role; title: string; desc: string }> = [
+    { role: 'TWO_C_TEAM', title: '2C 催帳專員', desc: '記錄 Line、Email、簡訊、電話通知與催帳備註' },
+    { role: 'FA_TEAM', title: 'FA 財務法務專員', desc: '處理催告、終止函與存證信函，上傳文件' },
+    { role: 'ADMIN', title: '系統主管', desc: '檢視全部案件並管理信箱白名單' },
+  ];
+
+  return (
+    <div className="min-h-screen grid lg:grid-cols-[1.1fr_1fr] bg-white">
+      {/* 左側：產品說明與升級階梯 */}
+      <aside className="hidden lg:flex flex-col justify-between bg-brand-900 text-white p-12 xl:p-16">
+        <div className="flex items-center gap-3">
+          <Logo className="w-9 h-9" />
+          <span className="text-lg font-bold tracking-tight">Boxful 呆帳追蹤</span>
         </div>
 
-        {error && (
-          <div className="p-3.5 rounded-xl bg-red-50 text-red-700 text-xs flex items-start gap-2 border border-red-200">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <div className="flex-1 leading-relaxed whitespace-pre-line">{error}</div>
-          </div>
-        )}
+        <div className="max-w-md">
+          <h1 className="text-[40px] leading-[1.15] font-bold tracking-tight">
+            從逾期第 30 天，<br />一路追到結案。
+          </h1>
+          <p className="mt-5 text-[15px] leading-relaxed text-brand-100/80">
+            每週匯入 Outstanding Report，系統依逾期天數自動分到各階段。2C 負責勸導，FA 接手催告與終止，所有紀錄同步回 Google 試算表。
+          </p>
 
-        {/* Google OAuth Login Area */}
-        <div className="space-y-3">
-          <div className="bg-brand-50/60 p-4 rounded-2xl border border-brand-100 text-center space-y-2.5">
-            <div className="flex items-center justify-center gap-2">
-              <span className="text-xs font-semibold text-ink-700 block">
-                Boxful 企業 Google 帳號登入
-              </span>
-              {!isFirebaseConfigured && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">
-                  待設定 Firebase
-                </span>
-              )}
+          <div className="mt-12 flex items-end gap-3" aria-hidden>
+            {ladder.map((step) => (
+              <div key={step.day} className="flex-1">
+                <div className={`${step.h} ${step.color} rounded-t-md`} />
+                <div className="mt-3 text-2xl font-bold tabular-nums">{step.day}<span className="text-sm font-medium text-brand-200/70 ml-0.5">天</span></div>
+                <div className="text-[13px] text-brand-100/70">{step.name}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <p className="text-xs text-brand-200/50">僅供 Boxful 內部使用</p>
+      </aside>
+
+      {/* 右側：登入 */}
+      <main className="flex items-center justify-center px-6 py-12">
+        <div className="w-full max-w-sm animate-fade-in">
+          <div className="lg:hidden flex items-center gap-2.5 mb-10">
+            <Logo className="w-8 h-8" />
+            <span className="text-base font-bold tracking-tight">Boxful 呆帳追蹤</span>
+          </div>
+
+          <h2 className="text-2xl font-bold tracking-tight text-ink-900">登入</h2>
+          <p className="mt-1.5 text-sm text-ink-500">
+            使用 @boxful.com.tw 帳號，系統會依白名單給予對應權限。
+          </p>
+
+          {error && (
+            <div role="alert" className="mt-6 p-3 rounded-lg bg-red-50 text-red-800 text-[13px] flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 leading-relaxed whitespace-pre-line">{error}</div>
             </div>
-            <button
-              onClick={handleGoogleLogin}
-              disabled={isGoogleLoading || !!loadingRole}
-              className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-ink-200 bg-white text-ink-700 hover:border-brand-300 hover:bg-white hover:shadow-sm active:bg-ink-100 font-medium text-xs shadow-xs transition-all disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
-            >
-              {isGoogleLoading ? (
-                <div className="w-4 h-4 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
+          )}
+
+          <button
+            onClick={handleGoogleLogin}
+            disabled={isGoogleLoading || !!loadingRole}
+            className="btn btn-secondary w-full mt-8 !py-2.5 !text-sm"
+          >
+            {isGoogleLoading ? (
+              <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path
                     fill="#4285F4"
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -100,79 +124,44 @@ export const LoginPage: React.FC = () => {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                   />
                 </svg>
-              )}
-              {isGoogleLoading ? '登入驗證中...' : '使用 Boxful Google 帳號驗證登入'}
-            </button>
-            <span className="text-[10px] text-ink-400 block">
-              僅限 @boxful.com.tw 網域 • 系統將自動比對信箱白名單給予角色權限
-            </span>
+            )}
+            {isGoogleLoading ? '驗證中' : '使用 Google 帳號登入'}
+          </button>
+          {!isFirebaseConfigured && (
+            <p className="mt-2 text-xs text-amber-700">尚未設定 Firebase，Google 登入暫時無法使用。</p>
+          )}
+
+          <div className="mt-10">
+            <div className="flex items-center gap-3 text-xs font-semibold text-ink-500">
+              以測試角色進入
+              <span className="flex-1 h-px bg-ink-200" />
+            </div>
+            <ul className="mt-3 divide-y divide-ink-100 border-y border-ink-100">
+              {demoRoles.map((r) => (
+                <li key={r.role}>
+                  <button
+                    onClick={() => handleDevLogin(r.role)}
+                    disabled={!!loadingRole}
+                    className="group w-full text-left py-3 flex items-center gap-3 disabled:opacity-60"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-ink-900 group-hover:text-brand-700 transition-colors">
+                        {r.title}
+                      </div>
+                      <div className="text-xs text-ink-500 mt-0.5">{r.desc}</div>
+                    </div>
+                    {loadingRole === r.role ? (
+                      <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-ink-300 group-hover:text-brand-600 transition-colors" />
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
-
-        {/* Quick Role Switch for Testing & Demo */}
-        <div className="pt-2 border-t border-ink-100 space-y-3">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-ink-800">
-            <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-            <span>測試與角色快速切換登入：</span>
-          </div>
-
-          <div className="space-y-2">
-            {/* 2C Team Specialist */}
-            <button
-              onClick={() => handleDevLogin('TWO_C_TEAM')}
-              disabled={!!loadingRole}
-              className="w-full text-left p-3 rounded-xl border border-brand-200 bg-brand-50/50 hover:bg-brand-100/70 transition-all flex items-center justify-between group"
-            >
-              <div>
-                <div className="text-xs font-bold text-brand-950 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-brand-600"></span>
-                  2C Team 催帳專員 (Alice)
-                </div>
-                <div className="text-[11px] text-ink-500 mt-0.5">
-                  權限：維護 Line / Email / 電話催帳、填寫催帳備註
-                </div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-brand-600 group-hover:translate-x-1 transition-transform" />
-            </button>
-
-            {/* FA Team Specialist */}
-            <button
-              onClick={() => handleDevLogin('FA_TEAM')}
-              disabled={!!loadingRole}
-              className="w-full text-left p-3 rounded-xl border border-sky-200 bg-sky-50/50 hover:bg-sky-100/70 transition-all flex items-center justify-between group"
-            >
-              <div>
-                <div className="text-xs font-bold text-sky-950 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-sky-600"></span>
-                  FA 財務法務專員 (Bob)
-                </div>
-                <div className="text-[11px] text-ink-500 mt-0.5">
-                  權限：滿50天催告/滿80天終止、維護 Google 雲端文件連結
-                </div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-sky-600 group-hover:translate-x-1 transition-transform" />
-            </button>
-
-            {/* Admin */}
-            <button
-              onClick={() => handleDevLogin('ADMIN')}
-              disabled={!!loadingRole}
-              className="w-full text-left p-3 rounded-xl border border-amber-200 bg-amber-50/50 hover:bg-amber-100/70 transition-all flex items-center justify-between group"
-            >
-              <div>
-                <div className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-amber-600"></span>
-                  系統主管 (Admin)
-                </div>
-                <div className="text-[11px] text-ink-500 mt-0.5">
-                  權限：全系統完整管理、信箱白名單權限設定
-                </div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-amber-600 group-hover:translate-x-1 transition-transform" />
-            </button>
-          </div>
-        </div>
-      </div>
+      </main>
     </div>
   );
 };
