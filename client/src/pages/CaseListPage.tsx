@@ -1,20 +1,24 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Search,
   Download,
-  ExternalLink,
+  Paperclip,
   ChevronLeft,
   ChevronRight,
-  ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
   RefreshCw,
-  AlertTriangle,
+  X,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { BusinessUnit } from '../types';
 import { casesApi } from '../api';
 import { StatusBadge } from '../components/StatusBadge';
 import { CaseDetailDrawer } from '../components/CaseDetailDrawer';
+import { AgingBar } from '../components/AgingBar';
+import type { CaseRecord } from '../types';
 
 interface CaseListPageProps {
   businessUnit: BusinessUnit;
@@ -26,7 +30,6 @@ interface CaseListPageProps {
 
 export const CaseListPage: React.FC<CaseListPageProps> = ({
   businessUnit,
-  onSelectBusinessUnit,
   initialStage = '',
 }) => {
   const [stageFilter, setStageFilter] = useState<string>(initialStage);
@@ -40,6 +43,15 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+
+  // 從導覽列切換事業體時回到第一頁
+  const prevUnit = useRef(businessUnit);
+  useEffect(() => {
+    if (prevUnit.current !== businessUnit) {
+      prevUnit.current = businessUnit;
+      setPage(1);
+    }
+  }, [businessUnit]);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: [
@@ -115,44 +127,62 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
     setPage(1);
   };
 
-  return (
-    <div className="space-y-6 animate-fade-in pb-12">
-      {/* Top Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-ink-200 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center bg-ink-100 p-1 rounded-xl border border-ink-200">
-            <button
-              onClick={() => {
-                onSelectBusinessUnit('VALET');
-                setPage(1);
-              }}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                businessUnit === 'VALET'
-                  ? 'bg-valet-600 text-white shadow-xs'
-                  : 'text-ink-600 hover:text-ink-900'
-              }`}
-            >
-              Valet 欠款案件
-            </button>
-            <button
-              onClick={() => {
-                onSelectBusinessUnit('PEPPER');
-                setPage(1);
-              }}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                businessUnit === 'PEPPER'
-                  ? 'bg-pepper-600 text-white shadow-xs'
-                  : 'text-ink-600 hover:text-ink-900'
-              }`}
-            >
-              Pepper 欠款案件
-            </button>
-          </div>
+  const unitName = businessUnit === 'VALET' ? 'Valet' : 'Pepper';
+  const hasFilters = !!(stageFilter || search || contactStatus || minDays !== undefined);
+  const pendingCount = data?.pendingConfirmationCount ?? 0;
+  const pendingActive = statusTagFilter === 'PENDING_CONFIRMATION';
 
-          {/* 待確認是否結案快捷篩選 */}
+  const md = (d?: string | null) => (d ? format(new Date(d), 'MM/dd') : '');
+
+  const sortIcon = (field: string) => {
+    if (sortBy !== field) return <ChevronsUpDown className="w-3.5 h-3.5 text-ink-300" />;
+    return sortOrder === 'asc' ? (
+      <ChevronUp className="w-3.5 h-3.5 text-brand-600" />
+    ) : (
+      <ChevronDown className="w-3.5 h-3.5 text-brand-600" />
+    );
+  };
+
+  const channels = (item: CaseRecord) => [
+    { label: 'Line', date: item.lineNoticeDate },
+    { label: 'Email', date: item.emailNoticeDate },
+    { label: '簡訊', date: item.smsNoticeDate },
+    { label: '電話', date: item.phoneNoticeDate },
+  ];
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* 頁首 */}
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink-900">{unitName} 案件清單</h1>
+          <p className="mt-1 text-sm text-ink-500 tabular-nums">
+            {data
+              ? `${data.pagination.totalCount} 筆案件，欠款合計 $${(data.totalAmountSum || 0).toLocaleString()}`
+              : '載入中'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => refetch()} disabled={isFetching} className="btn btn-ghost" aria-label="重新整理">
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+          </button>
+          <button onClick={handleExport} disabled={isExporting || !data?.items?.length} className="btn btn-secondary">
+            <Download className="w-4 h-4" />
+            {isExporting ? '匯出中' : '匯出 Excel'}
+          </button>
+        </div>
+      </header>
+
+      {/* 待確認結案提醒 */}
+      {(pendingCount > 0 || pendingActive) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-900">
+            <strong className="font-semibold tabular-nums">{pendingCount} 位客戶</strong>
+            沒有出現在最新週報，可能已經繳清，請核對後結案。
+          </p>
           <button
             onClick={() => {
-              if (statusTagFilter === 'PENDING_CONFIRMATION') {
+              if (pendingActive) {
                 setStatusTagFilter('');
               } else {
                 setStatusTagFilter('PENDING_CONFIRMATION');
@@ -160,344 +190,254 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
               }
               setPage(1);
             }}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
-              statusTagFilter === 'PENDING_CONFIRMATION'
-                ? 'bg-amber-500 text-white border-amber-600 shadow-xs ring-2 ring-amber-500/20'
-                : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
-            }`}
+            className={`btn !py-1.5 ${pendingActive ? 'bg-amber-900 text-white hover:bg-amber-950' : 'bg-white text-amber-900 border border-amber-300 hover:bg-amber-100'}`}
           >
-            <AlertTriangle className="w-3.5 h-3.5" />
-            待確認是否結案
-            {(data?.pendingConfirmationCount ?? 0) > 0 && (
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                statusTagFilter === 'PENDING_CONFIRMATION' ? 'bg-white text-amber-600' : 'bg-amber-600 text-white'
-              }`}>
-                {data?.pendingConfirmationCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="p-2 rounded-xl text-ink-400 hover:text-ink-700 hover:bg-ink-100 transition-colors"
-            title="重新載入"
-          >
-            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-brand-600' : ''}`} />
+            {pendingActive ? '顯示全部案件' : '只看待確認'}
           </button>
         </div>
+      )}
 
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={handleExport}
-            disabled={isExporting || !data?.items?.length}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-ink-700 bg-white hover:bg-ink-50 border border-ink-300 rounded-xl transition-all shadow-xs disabled:opacity-50"
-          >
-            <Download className="w-3.5 h-3.5 text-ink-500" />
-            {isExporting ? '匯出中...' : '匯出 Excel 報表'}
-          </button>
+      {/* 篩選列 */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="relative flex-1 min-w-60">
+          <Search className="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="search"
+            placeholder="搜尋姓名、UID、電話、Email 或備註"
+            aria-label="搜尋案件"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="field !pl-9"
+          />
         </div>
+
+        <select
+          aria-label="階段"
+          value={stageFilter}
+          onChange={(e) => {
+            setStageFilter(e.target.value);
+            setPage(1);
+          }}
+          className="field !w-auto min-w-36"
+        >
+          <option value="">所有階段</option>
+          <option value="UNREACHED">追蹤中（未滿 30 天）</option>
+          <option value="STAGE_1">勸導期（滿 30 天）</option>
+          <option value="STAGE_2">催告期（滿 50 天）</option>
+          <option value="STAGE_3">終止期（滿 80 天）</option>
+          <option value="STAGE_4">待 write-off（滿 95 天）</option>
+          <option value="CLOSED">已結案</option>
+        </select>
+
+        <select
+          aria-label="聯絡狀態"
+          value={contactStatus}
+          onChange={(e) => {
+            setContactStatus(e.target.value);
+            setPage(1);
+          }}
+          className="field !w-auto min-w-36"
+        >
+          <option value="">所有聯絡狀態</option>
+          <option value="line_contacted">已用 Line 通知</option>
+          <option value="email_contacted">已寄 Email</option>
+          <option value="phone_contacted">已電話聯絡</option>
+          <option value="uncontacted">尚未通知</option>
+        </select>
+
+        <select
+          aria-label="逾期天數"
+          value={minDays !== undefined ? String(minDays) : ''}
+          onChange={(e) => {
+            setMinDays(e.target.value ? Number(e.target.value) : undefined);
+            setPage(1);
+          }}
+          className="field !w-auto min-w-36"
+        >
+          <option value="">任何逾期天數</option>
+          <option value="30">逾期 30 天以上</option>
+          <option value="50">逾期 50 天以上</option>
+          <option value="80">逾期 80 天以上</option>
+          <option value="95">逾期 95 天以上</option>
+        </select>
+
+        {hasFilters && (
+          <button onClick={clearFilters} className="btn btn-ghost !px-2.5">
+            <X className="w-4 h-4" />
+            清除篩選
+          </button>
+        )}
       </div>
 
-      {/* Filters Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-ink-200 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Keyword Search */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="搜尋 UID / 姓名 / 電話 / Email / 備註..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full text-xs rounded-xl border-ink-300 bg-ink-50/50 pl-9 pr-3 py-2.5 border focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400"
-            />
-          </div>
-
-          {/* Stage Filter */}
-          <div>
-            <select
-              value={stageFilter}
-              onChange={(e) => {
-                setStageFilter(e.target.value);
-                setPage(1);
-              }}
-              className="w-full text-xs rounded-xl border-ink-300 bg-ink-50/50 px-3 py-2.5 border focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400"
-            >
-              <option value="">全部階段 (All Stages)</option>
-              <option value="STAGE_1">1. 第一階段：勸導期 (≥30天)</option>
-              <option value="STAGE_2">2. 第二階段：催告期 (≥50天)</option>
-              <option value="STAGE_3">3. 第三階段：終止期 (≥80天)</option>
-              <option value="STAGE_4">4. 待write-off (≥95天/終止滿15天)</option>
-              <option value="CLOSED">5. 已結案</option>
-              <option value="UNREACHED">追蹤中 (未滿30天)</option>
-            </select>
-          </div>
-
-          {/* Contact Status */}
-          <div>
-            <select
-              value={contactStatus}
-              onChange={(e) => {
-                setContactStatus(e.target.value);
-                setPage(1);
-              }}
-              className="w-full text-xs rounded-xl border-ink-300 bg-ink-50/50 px-3 py-2.5 border focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400"
-            >
-              <option value="">全部聯絡狀態</option>
-              <option value="line_contacted">🟢 Line 已通知</option>
-              <option value="email_contacted">📧 Email 已通知</option>
-              <option value="phone_contacted">📞 電話已通話</option>
-              <option value="uncontacted">⚪ 尚未進行 2C 通知</option>
-            </select>
-          </div>
-
-          {/* Overdue Days threshold */}
-          <div>
-            <select
-              value={minDays !== undefined ? String(minDays) : ''}
-              onChange={(e) => {
-                setMinDays(e.target.value ? Number(e.target.value) : undefined);
-                setPage(1);
-              }}
-              className="w-full text-xs rounded-xl border-ink-300 bg-ink-50/50 px-3 py-2.5 border focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-400/20 focus:border-brand-400"
-            >
-              <option value="">全部逾期天數</option>
-              <option value="30">逾期 30 天以上 (勸導標準)</option>
-              <option value="50">逾期 50 天以上 (催告標準)</option>
-              <option value="80">逾期 80 天以上 (終止標準)</option>
-              <option value="95">逾期 95 天以上 (待write-off)</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Filter Results Summary */}
-        <div className="flex items-center justify-between pt-2 text-xs text-ink-500 border-t border-ink-100">
-          <div>
-            共找到 <strong className="text-ink-800">{data?.pagination.totalCount || 0}</strong> 筆案件，
-            篩選總欠款金額: <strong className="text-red-600 font-semibold">${(data?.totalAmountSum || 0).toLocaleString()}</strong>
-          </div>
-          {(stageFilter || search || contactStatus || minDays !== undefined) && (
-            <button
-              onClick={clearFilters}
-              className="text-xs text-brand-600 hover:text-brand-800 font-medium"
-            >
-              重設所有篩選
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Cases Table */}
-      <div className="bg-white rounded-2xl border border-ink-200 shadow-xs overflow-hidden">
+      {/* 案件表格 */}
+      <div className="panel overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left text-[13px] border-collapse">
             <thead>
-              <tr className="bg-ink-50 text-ink-600 font-bold border-b border-ink-200">
-                <th className="py-3 px-4 w-32">客戶 UID</th>
-                <th className="py-3 px-3 w-36">姓名</th>
-                <th
-                  onClick={() => handleSort('outstandingAmount')}
-                  className="py-3 px-3 text-right cursor-pointer hover:text-ink-900 select-none w-28"
-                >
-                  <div className="flex items-center justify-end gap-1">
-                    欠款金額
-                    <ArrowUpDown className="w-3 h-3 text-ink-400" />
-                  </div>
+              <tr className="text-xs text-ink-500 border-b border-ink-200 bg-ink-50/60">
+                <th className="py-3 pl-5 pr-3 font-semibold">客戶</th>
+                <th className="py-3 px-3 font-semibold text-right">
+                  <button onClick={() => handleSort('outstandingAmount')} className="inline-flex items-center gap-1 hover:text-ink-900">
+                    欠款
+                    {sortIcon('outstandingAmount')}
+                  </button>
                 </th>
-                <th
-                  onClick={() => handleSort('outstandingDays')}
-                  className="py-3 px-3 text-center cursor-pointer hover:text-ink-900 select-none w-24"
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    逾期天數
-                    <ArrowUpDown className="w-3 h-3 text-ink-400" />
-                  </div>
+                <th className="py-3 px-3 font-semibold">
+                  <button onClick={() => handleSort('outstandingDays')} className="inline-flex items-center gap-1 hover:text-ink-900">
+                    逾期
+                    {sortIcon('outstandingDays')}
+                  </button>
                 </th>
-                <th className="py-3 px-3 w-48">當前階段</th>
-                <th className="py-3 px-3 w-40">2C 催帳進度</th>
-                <th className="py-3 px-3 w-44">FA 催告 / 終止</th>
-                <th className="py-3 px-3 text-center w-24">結案狀態</th>
-                <th className="py-3 px-4 text-right w-20">操作</th>
+                <th className="py-3 px-3 font-semibold">階段</th>
+                <th className="py-3 px-3 font-semibold">2C 通知</th>
+                <th className="py-3 pl-3 pr-5 font-semibold">催告 / 終止</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-ink-100 text-ink-700">
+            <tbody className="text-ink-800">
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center text-ink-400">
-                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-brand-600" />
-                    載入中...
+                  <td colSpan={6} className="py-20 text-center text-sm text-ink-500">
+                    <RefreshCw className="w-4 h-4 animate-spin inline mr-2 -mt-0.5" />
+                    載入案件
                   </td>
                 </tr>
               ) : data?.items?.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center text-ink-400">
-                    查無符合條件的欠款案件
+                  <td colSpan={6} className="py-20 text-center">
+                    <p className="text-sm font-semibold text-ink-800">沒有符合條件的案件</p>
+                    {hasFilters && (
+                      <button onClick={clearFilters} className="mt-2 text-sm font-semibold text-brand-700 hover:underline underline-offset-4">
+                        清除篩選
+                      </button>
+                    )}
                   </td>
                 </tr>
               ) : (
-                data?.items.map((item) => (
-                  <tr
-                    key={item.id}
-                    onClick={() => setSelectedCaseId(item.id)}
-                    className="hover:bg-brand-50/30 transition-colors cursor-pointer"
-                  >
-                    {/* UID */}
-                    <td className="py-3 px-4 font-mono font-bold text-ink-900">
-                      {item.uid}
-                    </td>
-
-                    {/* Name & Contact Info */}
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold text-ink-900">{item.name}</span>
-                        {item.statusTag === 'PENDING_CONFIRMATION' && !item.isClosed && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                            待確認結案
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-ink-400 font-mono mt-0.5">{item.phone || item.email || '-'}</div>
-                      {/* Valet 專屬：顯示服務類型與地址 */}
-                      {businessUnit === 'VALET' && (item.serviceType || item.address) && (
-                        <div className="text-[10px] text-ink-500 truncate max-w-xs mt-0.5">
-                          {item.serviceType && <span className="text-brand-600 font-medium mr-1.5">[{item.serviceType}]</span>}
-                          {item.address}
+                data?.items.map((item) => {
+                  const pending = item.statusTag === 'PENDING_CONFIRMATION' && !item.isClosed;
+                  return (
+                    <tr
+                      key={item.id}
+                      onClick={() => setSelectedCaseId(item.id)}
+                      className="group border-b border-ink-100 last:border-b-0 hover:bg-brand-50/40 transition-colors cursor-pointer"
+                    >
+                      {/* 客戶 */}
+                      <td className="py-3.5 pl-5 pr-3 min-w-56">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCaseId(item.id);
+                            }}
+                            className="font-semibold text-ink-900 group-hover:text-brand-800 text-left"
+                          >
+                            {item.name}
+                          </button>
+                          {pending && (
+                            <span className="text-2xs font-semibold text-amber-800 bg-amber-100 rounded px-1.5">待確認</span>
+                          )}
                         </div>
-                      )}
-                    </td>
+                        <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-ink-500 tabular-nums">
+                          <span>{item.uid}</span>
+                          <span>{item.phone || item.email || ''}</span>
+                        </div>
+                        {businessUnit === 'VALET' && (item.serviceType || item.address) && (
+                          <div className="mt-0.5 text-xs text-ink-400 truncate max-w-64">
+                            {[item.serviceType, item.address].filter(Boolean).join('，')}
+                          </div>
+                        )}
+                      </td>
 
-                    {/* Amount */}
-                    <td className="py-3 px-3 text-right font-mono font-bold text-red-600">
-                      ${item.outstandingAmount.toLocaleString()}
-                    </td>
+                      {/* 欠款 */}
+                      <td className="py-3.5 px-3 text-right font-semibold text-ink-900 tabular-nums whitespace-nowrap">
+                        ${item.outstandingAmount.toLocaleString()}
+                      </td>
 
-                    {/* Outstanding Days */}
-                    <td className="py-3 px-3 text-center font-mono">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded font-bold ${
-                          item.outstandingDays >= 80
-                            ? 'bg-rose-100 text-rose-700'
-                            : item.outstandingDays >= 50
-                            ? 'bg-amber-100 text-amber-700'
-                            : item.outstandingDays >= 30
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-ink-100 text-ink-600'
-                        }`}
-                      >
-                        {item.outstandingDays} 天
-                      </span>
-                    </td>
+                      {/* 逾期 */}
+                      <td className="py-3.5 px-3 min-w-36">
+                        <div className="text-[13px] font-semibold text-ink-900 tabular-nums">
+                          {item.outstandingDays}
+                          <span className="font-normal text-ink-500 ml-0.5">天</span>
+                        </div>
+                        <AgingBar days={item.outstandingDays} isClosed={item.isClosed} className="mt-1.5 w-28" />
+                      </td>
 
-                    {/* Stage Badge */}
-                    <td className="py-3 px-3">
-                      <StatusBadge stage={item.stage} isClosed={item.isClosed} />
-                    </td>
+                      {/* 階段 */}
+                      <td className="py-3.5 px-3">
+                        <StatusBadge stage={item.stage} isClosed={item.isClosed} />
+                      </td>
 
-                    {/* 2C Contact Progress */}
-                    <td className="py-3 px-3 text-[11px]">
-                      <div className="flex items-center gap-1.5">
-                        {item.lineNoticeDate ? (
-                          <span className="inline-flex items-center gap-1 text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded border border-brand-200">
-                            Line: {format(new Date(item.lineNoticeDate), 'MM/dd')}
-                          </span>
+                      {/* 2C 通知 */}
+                      <td className="py-3.5 px-3 min-w-48">
+                        <div className="flex gap-1">
+                          {channels(item).map((c) => (
+                            <span
+                              key={c.label}
+                              title={c.date ? `${c.label} ${md(c.date)}` : `${c.label} 尚未通知`}
+                              className={`text-2xs font-semibold rounded px-1.5 py-px ${
+                                c.date ? 'bg-brand-100 text-brand-800' : 'bg-ink-100 text-ink-400'
+                              }`}
+                            >
+                              {c.label}
+                            </span>
+                          ))}
+                        </div>
+                        {item.twoCNotes && (
+                          <p className="mt-1 text-xs text-ink-500 truncate max-w-52" title={item.twoCNotes}>
+                            {item.twoCNotes}
+                          </p>
+                        )}
+                      </td>
+
+                      {/* 催告 / 終止 */}
+                      <td className="py-3.5 pl-3 pr-5 text-xs text-ink-600 tabular-nums whitespace-nowrap">
+                        {item.demandNoticeDate || item.terminationNoticeDate ? (
+                          <div className="space-y-0.5">
+                            {item.demandNoticeDate && (
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-sm bg-stage-2" />
+                                催告 {md(item.demandNoticeDate)}
+                                {item.demandDocUrl && <Paperclip className="w-3 h-3 text-ink-400" aria-label="有附件" />}
+                              </div>
+                            )}
+                            {item.terminationNoticeDate && (
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-sm bg-stage-3" />
+                                終止 {md(item.terminationNoticeDate)}
+                                {item.terminationDocUrl && <Paperclip className="w-3 h-3 text-ink-400" aria-label="有附件" />}
+                              </div>
+                            )}
+                          </div>
                         ) : (
-                          <span className="text-ink-300">Line未通</span>
+                          <span className="text-ink-300">–</span>
                         )}
-                        {item.emailNoticeDate && (
-                          <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                            信
-                          </span>
-                        )}
-                        {item.phoneNoticeDate && (
-                          <span className="inline-flex items-center gap-1 text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
-                            電
-                          </span>
-                        )}
-                      </div>
-                      {item.twoCNotes && (
-                        <p className="text-[10px] text-ink-400 truncate max-w-[150px] mt-0.5">
-                          {item.twoCNotes}
-                        </p>
-                      )}
-                    </td>
-
-                    {/* FA Legal Progress */}
-                    <td className="py-3 px-3 text-[11px]">
-                      {item.demandNoticeDate && (
-                        <div className="flex items-center gap-1 text-amber-700 font-medium">
-                          <span>催告: {format(new Date(item.demandNoticeDate), 'MM/dd')}</span>
-                          {item.demandDocUrl && (
-                            <ExternalLink className="w-3 h-3 text-amber-600" />
-                          )}
-                        </div>
-                      )}
-                      {item.terminationNoticeDate && (
-                        <div className="flex items-center gap-1 text-rose-700 font-medium mt-0.5">
-                          <span>終止: {format(new Date(item.terminationNoticeDate), 'MM/dd')}</span>
-                          {item.terminationDocUrl && (
-                            <ExternalLink className="w-3 h-3 text-rose-600" />
-                          )}
-                        </div>
-                      )}
-                      {!item.demandNoticeDate && !item.terminationNoticeDate && (
-                        <span className="text-ink-300">-</span>
-                      )}
-                    </td>
-
-                    {/* Closed Status */}
-                    <td className="py-3 px-3 text-center">
-                      {item.isClosed ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-brand-100 text-brand-800">
-                          已結案
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] text-ink-400">
-                          處理中
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Action */}
-                    <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedCaseId(item.id);
-                        }}
-                        className="text-xs font-semibold text-brand-600 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 px-2.5 py-1 rounded-lg transition-colors"
-                      >
-                        編輯
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination */}
+        {/* 分頁 */}
         {data && data.pagination.totalPages > 1 && (
-          <div className="px-5 py-3.5 border-t border-ink-200 flex items-center justify-between text-xs text-ink-500 bg-ink-50/50">
+          <div className="px-5 py-3 border-t border-ink-200 flex items-center justify-between text-[13px] text-ink-500 tabular-nums">
             <div>
-              頁次 {data.pagination.page} / {data.pagination.totalPages}（每頁 {data.pagination.pageSize} 筆）
+              第 {data.pagination.page} 頁，共 {data.pagination.totalPages} 頁
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
-                className="p-1.5 rounded-lg border border-ink-300 bg-white disabled:opacity-40 hover:bg-ink-50 transition-colors"
-              >
+            <div className="flex items-center gap-1">
+              <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="btn btn-ghost !p-1.5" aria-label="上一頁">
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button
                 disabled={page >= data.pagination.totalPages}
                 onClick={() => setPage(page + 1)}
-                className="p-1.5 rounded-lg border border-ink-300 bg-white disabled:opacity-40 hover:bg-ink-50 transition-colors"
+                className="btn btn-ghost !p-1.5"
+                aria-label="下一頁"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -506,7 +446,6 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
         )}
       </div>
 
-      {/* Case Detail Slide-over Drawer */}
       <CaseDetailDrawer
         caseId={selectedCaseId}
         onClose={() => setSelectedCaseId(null)}

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileSpreadsheet, Download, CheckCircle, AlertCircle, X, Loader2 } from 'lucide-react';
+import { FileSpreadsheet, Download, CheckCircle2, AlertCircle, X, Loader2 } from 'lucide-react';
 import type { BusinessUnit } from '../types';
 import { reportsApi } from '../api';
 
@@ -88,174 +88,144 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const stats = result
+    ? [
+        { label: '解析筆數', value: result.result.totalCount },
+        { label: '新案件', value: result.result.newCount },
+        { label: '更新案件', value: result.result.updatedCount },
+        { label: '待確認結案', value: result.result.pendingConfirmationCount ?? 0 },
+      ]
+    : [];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink-950/45 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-ink-100 overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-ink-100 flex items-center justify-between bg-ink-50/50">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-lg bg-brand-50 text-brand-600">
-              <Upload className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-ink-800">上傳每週 Outstanding Report</h3>
-              <p className="text-xs text-ink-500">支援 Excel (.xlsx, .xls) 及 CSV 檔案</p>
-            </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="upload-title">
+      <div className="absolute inset-0 bg-ink-950/40 animate-fade-in" onClick={onClose} aria-hidden />
+
+      <div className="relative bg-white rounded-2xl max-w-lg w-full shadow-2xl animate-fade-in">
+        <div className="px-6 pt-6 flex items-start justify-between gap-4">
+          <div>
+            <h3 id="upload-title" className="text-lg font-bold tracking-tight text-ink-900">上傳每週 Outstanding Report</h3>
+            <p className="mt-0.5 text-[13px] text-ink-500">系統會依 UID 合併金額，並同步回 Google 試算表。</p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-ink-400 hover:text-ink-600 hover:bg-ink-100 transition-colors"
-          >
+          <button onClick={onClose} aria-label="關閉" className="btn btn-ghost !p-1.5 -mr-1.5">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Business Unit Selector */}
+          {/* 事業體 */}
           <div>
-            <label className="block text-xs font-semibold text-ink-700 uppercase tracking-wider mb-2">
-              選擇事業體 (Business Unit)
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setBusinessUnit('VALET');
-                  setResult(null);
-                }}
-                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border text-sm font-semibold transition-all ${
-                  businessUnit === 'VALET'
-                    ? 'border-valet-500 bg-valet-50/80 text-valet-700 shadow-sm ring-2 ring-valet-500/20'
-                    : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'
-                }`}
-              >
-                <span className={`w-2.5 h-2.5 rounded-full ${businessUnit === 'VALET' ? 'bg-valet-500' : 'bg-ink-300'}`}></span>
-                Valet
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setBusinessUnit('PEPPER');
-                  setResult(null);
-                }}
-                className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border text-sm font-semibold transition-all ${
-                  businessUnit === 'PEPPER'
-                    ? 'border-pepper-500 bg-pepper-50/80 text-pepper-700 shadow-sm ring-2 ring-pepper-500/20'
-                    : 'border-ink-200 bg-white text-ink-600 hover:bg-ink-50'
-                }`}
-              >
-                <span className={`w-2.5 h-2.5 rounded-full ${businessUnit === 'PEPPER' ? 'bg-pepper-500' : 'bg-ink-300'}`}></span>
-                Pepper
-              </button>
+            <span className="field-label">事業體</span>
+            <div role="radiogroup" className="grid grid-cols-2 gap-2">
+              {(['VALET', 'PEPPER'] as BusinessUnit[]).map((unit) => {
+                const active = businessUnit === unit;
+                return (
+                  <button
+                    key={unit}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => {
+                      setBusinessUnit(unit);
+                      setResult(null);
+                    }}
+                    className={`py-2.5 rounded-lg border text-sm font-semibold transition-colors ${
+                      active
+                        ? 'border-brand-600 bg-brand-50 text-brand-800 ring-1 ring-brand-600'
+                        : 'border-ink-200 text-ink-600 hover:border-ink-300'
+                    }`}
+                  >
+                    {unit === 'VALET' ? 'Valet' : 'Pepper'}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* File Upload Area */}
+          {/* 檔案 */}
           {!result && (
             <div>
               <div
+                role="button"
+                tabIndex={0}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-colors ${
-                  selectedFile
-                    ? 'border-brand-400 bg-brand-50/30'
-                    : 'border-ink-300 hover:border-brand-400 hover:bg-ink-50/50'
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click();
+                }}
+                className={`border border-dashed rounded-xl px-6 py-8 text-center transition-colors ${
+                  selectedFile ? 'border-brand-500 bg-brand-50/50' : 'border-ink-300 hover:border-brand-500 hover:bg-ink-50'
                 }`}
               >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
+                <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileChange} className="hidden" />
 
                 {selectedFile ? (
                   <div className="flex items-center justify-center gap-3">
-                    <FileSpreadsheet className="w-8 h-8 text-brand-600 flex-shrink-0" />
-                    <div className="text-left">
-                      <p className="text-sm font-medium text-ink-800 truncate max-w-xs">{selectedFile.name}</p>
-                      <p className="text-xs text-ink-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                    <FileSpreadsheet className="w-7 h-7 text-brand-600 flex-shrink-0" />
+                    <div className="text-left min-w-0">
+                      <p className="text-sm font-semibold text-ink-900 truncate max-w-64">{selectedFile.name}</p>
+                      <p className="text-xs text-ink-500 tabular-nums">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                     </div>
                   </div>
                 ) : (
-                  <div>
-                    <FileSpreadsheet className="w-10 h-10 text-ink-400 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-ink-700">拖曳檔案至此或點擊瀏覽</p>
-                    <p className="text-xs text-ink-500 mt-1">
-                      支援 .xlsx, .csv 檔案（必須包含 UID 與 逾期天數/金額 欄位）
-                    </p>
-                  </div>
+                  <>
+                    <FileSpreadsheet className="w-8 h-8 text-ink-300 mx-auto" />
+                    <p className="mt-2 text-sm font-semibold text-ink-800">拖曳檔案到這裡，或點擊選擇</p>
+                    <p className="mt-1 text-xs text-ink-500">.xlsx、.xls 或 .csv，需包含 UID、逾期天數與金額欄位</p>
+                  </>
                 )}
               </div>
 
-              <div className="mt-2 flex items-center justify-between">
+              <div className="mt-2.5 flex items-center justify-between">
                 <button
                   type="button"
                   onClick={handleDownloadSample}
-                  className="inline-flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-800 font-medium"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-700 hover:text-brand-900"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  下載標準格式範本
+                  <Download className="w-4 h-4" />
+                  下載範本
                 </button>
                 {selectedFile && (
-                  <button
-                    type="button"
-                    onClick={handleReset}
-                    className="text-xs text-ink-500 hover:text-ink-700"
-                  >
-                    清除選擇
+                  <button type="button" onClick={handleReset} className="text-[13px] text-ink-500 hover:text-ink-800">
+                    換一個檔案
                   </button>
                 )}
               </div>
             </div>
           )}
 
-          {/* Error message */}
           {error && (
-            <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 flex items-start gap-2.5 text-sm">
-              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold">匯入發生錯誤</p>
-                <p className="text-xs mt-0.5">{error}</p>
+            <div role="alert" className="px-4 py-3 rounded-lg bg-red-50 text-red-800 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <div className="text-[13px]">
+                <p className="font-semibold">匯入失敗</p>
+                <p className="mt-0.5">{error}</p>
               </div>
             </div>
           )}
 
-          {/* Success summary */}
           {result && (
-            <div className="p-4 rounded-xl bg-brand-50 border border-brand-200 space-y-3">
-              <div className="flex items-center gap-2 text-brand-800 font-semibold">
-                <CheckCircle className="w-5 h-5 text-brand-600" />
-                <span>{result.message}</span>
-              </div>
-              <p className="text-xs text-brand-700">
-                ✨ 系統已完成人名/UID 金額加總彙整，並自動非同步回寫 Google 試算表（2bad-debtbackup）對應原始與追蹤分頁。
-              </p>
-              <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                <div className="bg-white/80 p-2 rounded-lg border border-brand-100">
-                  <span className="text-ink-500 block">總解析筆數</span>
-                  <span className="font-bold text-ink-800 text-base">{result.result.totalCount}</span>
-                </div>
-                <div className="bg-white/80 p-2 rounded-lg border border-brand-100">
-                  <span className="text-brand-600 block">新進案件</span>
-                  <span className="font-bold text-brand-700 text-base">{result.result.newCount}</span>
-                </div>
-                <div className="bg-white/80 p-2 rounded-lg border border-brand-100">
-                  <span className="text-brand-600 block">更新既有案件</span>
-                  <span className="font-bold text-brand-700 text-base">{result.result.updatedCount}</span>
-                </div>
-                <div className="bg-white/80 p-2 rounded-lg border border-amber-200 bg-amber-50/50">
-                  <span className="text-amber-700 block font-medium">待確認結案</span>
-                  <span className="font-bold text-amber-800 text-base">{result.result.pendingConfirmationCount ?? 0}</span>
+            <div className="space-y-4">
+              <div className="flex items-start gap-2 text-brand-800">
+                <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">{result.message}</p>
+                  <p className="mt-0.5 text-[13px] text-ink-500">資料已同步回 Google 試算表。</p>
                 </div>
               </div>
+              <dl className="grid grid-cols-4 divide-x divide-ink-200 border-y border-ink-200 py-3">
+                {stats.map((st) => (
+                  <div key={st.label} className="px-3 first:pl-0">
+                    <dt className="text-xs text-ink-500">{st.label}</dt>
+                    <dd className="mt-0.5 text-xl font-bold text-ink-900 tabular-nums">{st.value}</dd>
+                  </div>
+                ))}
+              </dl>
               {result.result.errorCount > 0 && (
-                <div className="text-xs text-amber-700 mt-2">
-                  <p className="font-medium">部分資料略過 ({result.result.errorCount} 筆)：</p>
-                  <ul className="list-disc pl-4 mt-1 max-h-20 overflow-y-auto space-y-0.5">
+                <div className="text-[13px] text-amber-900">
+                  <p className="font-semibold">有 {result.result.errorCount} 筆資料被略過：</p>
+                  <ul className="list-disc pl-5 mt-1 max-h-24 overflow-y-auto space-y-0.5 text-xs">
                     {result.result.errors.map((e: string, idx: number) => (
                       <li key={idx}>{e}</li>
                     ))}
@@ -265,41 +235,19 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-ink-600 hover:text-ink-800 hover:bg-ink-100 rounded-xl transition-colors"
-            >
-              {result ? '完成並關閉' : '取消'}
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn btn-ghost">
+              {result ? '完成' : '取消'}
             </button>
             {!result && (
-              <button
-                type="submit"
-                disabled={!selectedFile || isUploading}
-                className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-xl transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isUploading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    解析匯入中...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4" />
-                    開始匯入
-                  </>
-                )}
+              <button type="submit" disabled={!selectedFile || isUploading} className="btn btn-primary">
+                {isUploading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isUploading ? '匯入中' : '開始匯入'}
               </button>
             )}
             {result && (
-              <button
-                type="button"
-                onClick={handleReset}
-                className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-xl"
-              >
-                再上傳一筆
+              <button type="button" onClick={handleReset} className="btn btn-secondary">
+                再上傳一份
               </button>
             )}
           </div>

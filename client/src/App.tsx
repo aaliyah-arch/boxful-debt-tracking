@@ -44,10 +44,10 @@ const MainLayout: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-brand-900 to-ink-950 flex items-center justify-center text-white">
-        <div className="text-center space-y-2">
-          <div className="w-10 h-10 border-4 border-brand-300 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-sm font-medium text-brand-100/80">系統載入中...</p>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex items-center gap-3 text-sm text-ink-500">
+          <div className="w-4 h-4 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
+          系統載入中
         </div>
       </div>
     );
@@ -78,7 +78,7 @@ const MainLayout: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-16">
         {activeTab === 'dashboard' && (
           <DashboardPage
             businessUnit={businessUnit}
