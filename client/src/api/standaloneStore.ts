@@ -62,25 +62,99 @@ export async function uploadFileToGas(
   return json.result.url as string;
 }
 
-async function syncReportToGas(
-  action: 'OVERWRITE_RAW_REPORT' | 'SYNC_SUMMARY_TRACKING',
-  businessUnit: BusinessUnit,
-  extraPayload: Record<string, any>
-) {
-  if (!DEFAULT_DEBT_BACKUP_GAS_URL) return;
+export interface SheetSyncStatus {
+  ok: boolean;
+  message: string;
+}
+
+/**
+ * 呼叫 Apps Script 並等待回應；任何失敗都會丟出可讀的錯誤訊息
+ */
+async function postToGas(action: string, payload: Record<string, any>): Promise<any> {
+  if (!DEFAULT_DEBT_BACKUP_GAS_URL) throw new Error('尚未設定 Google 試算表 Apps Script 網址');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+  let res: Response;
   try {
-    fetch(DEFAULT_DEBT_BACKUP_GAS_URL, {
+    res = await fetch(DEFAULT_DEBT_BACKUP_GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action,
-        businessUnit,
-        ...extraPayload,
-      }),
-    }).catch((e) => console.warn(`[GAS Sync] ${action} 回寫略過:`, e.message));
-  } catch (e) {
-    // ignore
+      body: JSON.stringify({ action, ...payload }),
+      signal: controller.signal,
+    });
+  } catch (e: any) {
+    if (e?.name === 'AbortError') throw new Error('Apps Script 回應逾時（超過 5 分鐘）');
+    throw new Error(
+      '無法連線到 Google Apps Script。請確認部署設定「誰可以存取」為「任何人」，並已用「新版本」重新部署'
+    );
+  } finally {
+    clearTimeout(timer);
   }
+  if (!res.ok) throw new Error(`Apps Script 回應 HTTP ${res.status}`);
+  const text = await res.text();
+  let json: any;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error('Apps Script 回應格式錯誤（可能需要重新授權或重新部署）');
+  }
+  if (!json.success) throw new Error(`Apps Script 錯誤：${json.error || '未知錯誤'}`);
+  return json.result;
+}
+
+/** 原始報表列整理：日期轉 yyyy-MM-dd、補齊欄數、去除整列空白 */
+function sanitizeRawRows(headers: string[], rows: any[][]): any[][] {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return rows
+    .map((r) =>
+      headers.map((_, i) => {
+        const v = r?.[i];
+        if (v === undefined || v === null) return '';
+        if (v instanceof Date) {
+          return isNaN(v.getTime()) ? '' : `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`;
+        }
+        return v;
+      })
+    )
+    .filter((r) => r.some((v) => String(v).trim() !== ''));
+}
+
+let lastReportSync: null | {
+  businessUnit: BusinessUnit;
+  headers: string[];
+  rows: any[][];
+  items: any[];
+} = null;
+
+async function syncReportToSheet(job: NonNullable<typeof lastReportSync>): Promise<SheetSyncStatus> {
+  lastReportSync = job;
+  try {
+    const raw = await postToGas('OVERWRITE_RAW_REPORT', {
+      businessUnit: job.businessUnit,
+      headers: job.headers,
+      rows: job.rows,
+    });
+    const summary = await postToGas('SYNC_SUMMARY_TRACKING', {
+      businessUnit: job.businessUnit,
+      items: job.items,
+    });
+    lastReportSync = null;
+    return {
+      ok: true,
+      message: `已寫入「${raw?.sheetName ?? '原始報表'}」${raw?.rowCount ?? job.rows.length} 列；「${
+        summary?.sheetName ?? '追蹤表'
+      }」更新 ${summary?.updatedCount ?? 0} 筆、新增 ${summary?.newCount ?? 0} 筆`,
+    };
+  } catch (e: any) {
+    console.error('[GAS Sync] 報表回寫失敗', e);
+    return { ok: false, message: e?.message || '回寫 Google 試算表失敗' };
+  }
+}
+
+/** 重新同步上一次失敗的報表回寫 */
+export async function retryLastReportSync(): Promise<SheetSyncStatus> {
+  if (!lastReportSync) return { ok: false, message: '沒有待重新同步的報表，請重新上傳檔案' };
+  return syncReportToSheet(lastReportSync);
 }
 
 const DEFAULT_ALLOWED_DOMAIN = 'boxful.com.tw';
@@ -868,12 +942,7 @@ export const standaloneStore = {
       console.warn('Failed to save import history:', e);
     }
 
-    // 非同步回寫 Google 試算表 (2bad-debtbackup)
-    // 1. 覆蓋原始報表
-    syncReportToGas('OVERWRITE_RAW_REPORT', businessUnit, {
-      headers: rawHeaders,
-      rows: rawRows,
-    });
+    // 回寫 Google 試算表 (2bad-debtbackup)：依序覆蓋原始報表、同步追蹤清單，並檢查結果
 
     // 2. 同步追蹤清單
     const summaryItems = Array.from(aggregatedMap.values()).map((c) => ({
@@ -907,7 +976,10 @@ export const standaloneStore = {
         });
       });
 
-    syncReportToGas('SYNC_SUMMARY_TRACKING', businessUnit, {
+    const sheetSync = await syncReportToSheet({
+      businessUnit,
+      headers: rawHeaders,
+      rows: sanitizeRawRows(rawHeaders, rawRows),
       items: summaryItems,
     });
 
@@ -920,6 +992,7 @@ export const standaloneStore = {
         pendingConfirmationCount,
         errorCount: 0,
         errors: [],
+        sheetSync,
       },
     };
   },

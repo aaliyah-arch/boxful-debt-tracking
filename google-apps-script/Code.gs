@@ -24,6 +24,7 @@ var SHEET_NAMES = {
   PEPPER_TRACKING: 'Pepper扣款失敗通知追蹤'
 };
 
+var SCRIPT_VERSION = '2026-10-12';
 var UPLOAD_FOLDER_NAME = '2bad-debtbackup 附件';
 
 /**
@@ -94,7 +95,8 @@ var DEFAULT_TRACKING_HEADERS = {
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
-    lock.waitLock(30000);
+    // 報表回寫可能需要較長時間，最多等候 2 分鐘取得鎖定
+    lock.waitLock(120000);
 
     if (!e.postData || !e.postData.contents) {
       return jsonResponse({ success: false, error: '未提供 POST 資料' });
@@ -116,9 +118,9 @@ function doPost(e) {
     } else {
       return jsonResponse({ success: false, error: '未知操作: ' + action });
     }
-    return jsonResponse({ success: true, action: action, result: result });
+    return jsonResponse({ success: true, version: SCRIPT_VERSION, action: action, result: result });
   } catch (err) {
-    return jsonResponse({ success: false, error: err.toString(), stack: err.stack });
+    return jsonResponse({ success: false, version: SCRIPT_VERSION, error: err.toString(), stack: err.stack });
   } finally {
     lock.releaseLock();
   }
@@ -127,6 +129,7 @@ function doPost(e) {
 function doGet(e) {
   return jsonResponse({
     status: 'ok',
+    version: SCRIPT_VERSION,
     message: '2bad-debtbackup Google Apps Script Web App 正常運作中',
     spreadsheetName: SpreadsheetApp.getActiveSpreadsheet().getName(),
     sheets: SpreadsheetApp.getActiveSpreadsheet().getSheets().map(function (s) { return s.getName(); })
@@ -332,7 +335,7 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
   var sheet = getOrCreateSheet(ss, sheetName, DEFAULT_TRACKING_HEADERS[isValet ? 'VALET' : 'PEPPER']);
   var cols = resolveColumns(sheet, businessUnit);
   var col = cols.col;
-  if (col.uid === -1) throw new Error('工作表「' + sheetName + '」找不到 UID 欄位');
+  if (col.uid === -1) throw new Error('工作表「' + sheetName + '」找不到 UID 欄位，請確認第一列表頭有「UID」');
 
   var width = cols.width;
   var lastRow = sheet.getLastRow();
@@ -352,6 +355,7 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
 
   var nowStr = nowString();
   var updatedCount = 0, newCount = 0, newRows = [];
+  var touchedCols = {}; // 有更新的欄位，最後整欄一次寫回（避免逐列寫入造成逾時）
 
   items.forEach(function (item) {
     var uid = String(item.uid || '').trim();
@@ -363,18 +367,18 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
 
     if (active) {
       var row = values[active.index];
-      var changed = {};
       var set = function (key, val) {
         var c = col[key];
         if (c === undefined || c === -1) return;
         row[c] = val;
-        changed[c] = true;
+        touchedCols[c] = true;
+        formulas[active.index][c] = ''; // 已改為新值，不再保留舊公式
       };
       if (item.name) set('name', item.name);
       set('outstandingDays', item.outstandingDays);
       set('amount', item.totalOutstandingAmount);
       if (item.email) set('email', item.email);
-      if (phone) set('phone', asText(phone));
+      if (phone) set('phone', phone);
       if (isValet) {
         if (item.serviceType) set('serviceType', item.serviceType);
         if (item.address) set('address', item.address);
@@ -382,14 +386,6 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
       set('statusTag', tag);
       if (item.stage) set('stage', item.stage);
       set('updatedAt', nowStr);
-
-      var out = row.map(function (v, c) {
-        if (!changed[c] && formulas[active.index] && formulas[active.index][c]) return formulas[active.index][c];
-        // 未變動的電話欄重新以文字寫回，避免被轉成數字
-        if (!changed[c] && c === col.phone && v !== '') return asText(normalizePhone(v));
-        return v;
-      });
-      sheet.getRange(active.index + 2, 1, 1, width).setValues([out]);
       updatedCount++;
     } else {
       var newRow = [];
@@ -417,6 +413,20 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
       newCount++;
     }
   });
+
+  // 既有列：只回寫有異動的欄位，每欄一次寫入；保留原公式，電話以文字寫入
+  if (values.length > 0) {
+    Object.keys(touchedCols).forEach(function (k) {
+      var c = Number(k);
+      var colValues = values.map(function (r, i) {
+        if (formulas[i][c]) return [formulas[i][c]];
+        var v = r[c];
+        if (c === col.phone) return [asText(normalizePhone(v))];
+        return [v];
+      });
+      sheet.getRange(2, c + 1, colValues.length, 1).setValues(colValues);
+    });
+  }
 
   if (newRows.length > 0) {
     sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, width).setValues(newRows);

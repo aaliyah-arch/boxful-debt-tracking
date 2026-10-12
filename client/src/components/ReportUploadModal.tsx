@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { FileSpreadsheet, Download, CheckCircle2, AlertCircle, X, Loader2 } from 'lucide-react';
 import type { BusinessUnit } from '../types';
 import { reportsApi } from '../api';
+import { retryLastReportSync, type SheetSyncStatus } from '../api/standaloneStore';
 
 interface ReportUploadModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -81,6 +83,18 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
       alert('下載範例檔案失敗: ' + (err.message || '未知錯誤'));
     }
   };
+
+  const handleRetrySync = async () => {
+    setIsRetrying(true);
+    try {
+      const sheetSync = await retryLastReportSync();
+      setResult((prev: any) => (prev ? { ...prev, result: { ...prev.result, sheetSync } } : prev));
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  const sheetSync: SheetSyncStatus | undefined = result?.result?.sheetSync;
 
   const handleReset = () => {
     setSelectedFile(null);
@@ -212,9 +226,32 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
                 <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
                 <div>
                   <p className="text-sm font-semibold">{result.message}</p>
-                  <p className="mt-0.5 text-[13px] text-ink-500">資料已同步回 Google 試算表。</p>
+                  {!sheetSync && (
+                    <p className="mt-0.5 text-[13px] text-ink-500">資料已同步回 Google 試算表。</p>
+                  )}
+                  {sheetSync?.ok && (
+                    <p className="mt-0.5 text-[13px] text-ink-500">Google 試算表：{sheetSync.message}</p>
+                  )}
                 </div>
               </div>
+              {sheetSync && !sheetSync.ok && (
+                <div role="alert" className="px-4 py-3 rounded-lg bg-red-50 text-red-800 flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div className="text-[13px] flex-1 min-w-0">
+                    <p className="font-semibold">系統已匯入，但回寫 Google 試算表失敗</p>
+                    <p className="mt-0.5 break-words">{sheetSync.message}</p>
+                    <button
+                      type="button"
+                      onClick={handleRetrySync}
+                      disabled={isRetrying}
+                      className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-red-900 underline underline-offset-2 disabled:opacity-50"
+                    >
+                      {isRetrying && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      {isRetrying ? '重新同步中' : '重新同步到試算表'}
+                    </button>
+                  </div>
+                </div>
+              )}
               <dl className="grid grid-cols-4 divide-x divide-ink-200 border-y border-ink-200 py-3">
                 {stats.map((st) => (
                   <div key={st.label} className="px-3 first:pl-0">
@@ -243,7 +280,7 @@ export const ReportUploadModal: React.FC<ReportUploadModalProps> = ({
             {!result && (
               <button type="submit" disabled={!selectedFile || isUploading} className="btn btn-primary">
                 {isUploading && <Loader2 className="w-4 h-4 animate-spin" />}
-                {isUploading ? '匯入中' : '開始匯入'}
+                {isUploading ? '匯入並回寫試算表中' : '開始匯入'}
               </button>
             )}
             {result && (
