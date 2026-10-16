@@ -16,6 +16,7 @@ import { format } from 'date-fns';
 import type { BusinessUnit } from '../types';
 import { casesApi } from '../api';
 import { getCasesSyncError } from '../api/standaloneStore';
+import { safeFormat } from '../utils/dateUtils';
 import { StatusBadge } from '../components/StatusBadge';
 import { CaseDetailDrawer } from '../components/CaseDetailDrawer';
 import { AgingBar } from '../components/AgingBar';
@@ -32,8 +33,10 @@ interface CaseListPageProps {
 export const CaseListPage: React.FC<CaseListPageProps> = ({
   businessUnit,
   initialStage = '',
+  initialMonthBucket = '',
 }) => {
   const [stageFilter, setStageFilter] = useState<string>(initialStage);
+  const [monthBucket, setMonthBucket] = useState<string>(initialMonthBucket);
   const [statusTagFilter, setStatusTagFilter] = useState<string>('');
   const [search, setSearch] = useState('');
   const [contactStatus, setContactStatus] = useState('');
@@ -59,6 +62,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
       'cases-list',
       businessUnit,
       stageFilter,
+      monthBucket,
       statusTagFilter,
       search,
       contactStatus,
@@ -72,6 +76,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
       casesApi.list({
         businessUnit,
         stage: stageFilter || undefined,
+        monthBucket: monthBucket || undefined,
         statusTag: statusTagFilter || undefined,
         search: search || undefined,
         contactStatus: contactStatus || undefined,
@@ -122,6 +127,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
 
   const clearFilters = () => {
     setStageFilter('');
+    setMonthBucket('');
     setSearch('');
     setContactStatus('');
     setMinDays(undefined);
@@ -129,11 +135,11 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
   };
 
   const unitName = businessUnit === 'VALET' ? 'Valet' : 'Pepper';
-  const hasFilters = !!(stageFilter || search || contactStatus || minDays !== undefined);
+  const hasFilters = !!(stageFilter || monthBucket || search || contactStatus || minDays !== undefined);
   const pendingCount = data?.pendingConfirmationCount ?? 0;
   const pendingActive = statusTagFilter === 'PENDING_CONFIRMATION';
 
-  const md = (d?: string | null) => (d ? format(new Date(d), 'MM/dd') : '');
+  const md = (d?: string | null) => safeFormat(d, 'MM/dd');
 
   const sortIcon = (field: string) => {
     if (sortBy !== field) return <ChevronsUpDown className="w-3.5 h-3.5 text-ink-300" />;
@@ -269,6 +275,20 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
           <option value="80">逾期 80 天以上</option>
           <option value="95">逾期 95 天以上</option>
         </select>
+
+        {monthBucket && (
+          <button
+            onClick={() => {
+              setMonthBucket('');
+              setPage(1);
+            }}
+            className="btn btn-secondary !px-2.5"
+            aria-label="移除帳單月份篩選"
+          >
+            帳單月份：{monthBucket === 'older' ? '2026/06 前' : monthBucket}
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         {hasFilters && (
           <button onClick={clearFilters} className="btn btn-ghost !px-2.5">
