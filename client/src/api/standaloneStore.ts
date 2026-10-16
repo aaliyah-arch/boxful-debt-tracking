@@ -12,12 +12,13 @@ export const DEFAULT_DEBT_BACKUP_GAS_URL =
   'https://script.google.com/macros/s/AKfycbzbayhWa_N7qzx_jhw7R9uRp1v6itw7zK8amzcbdEXHMP96mt91dXaPnUPhuEj9JvcR/exec';
 
 /**
- * 上傳檔案至 Google 雲端（試算表所在資料夾的「2bad-debtbackup 附件」），回傳檔案連結
+ * 上傳檔案至 Google 雲端（試算表所在資料夾的「2bad-debtbackup 附件」），回傳檔案連結。
+ * 帶入 caseId 時，Apps Script 會同時把連結回填到該案件的「電子催告檔」欄位（顯示 Link）。
  */
 export async function uploadFileToGas(
   file: File,
-  meta: { businessUnit: string; uid: string; kind: string }
-): Promise<string> {
+  meta: { businessUnit: string; uid: string; kind: string; caseId?: string }
+): Promise<{ url: string; sheetUpdated: boolean; sheetError?: string }> {
   if (file.size > 20 * 1024 * 1024) {
     throw new Error('檔案超過 20MB，請壓縮後再上傳');
   }
@@ -27,22 +28,25 @@ export async function uploadFileToGas(
     reader.onerror = () => reject(new Error('讀取檔案失敗'));
     reader.readAsDataURL(file);
   });
-  const res = await fetch(DEFAULT_DEBT_BACKUP_GAS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({
-      action: 'UPLOAD_FILE',
-      ...meta,
-      fileName: file.name,
-      mimeType: file.type || 'application/octet-stream',
-      base64,
-    }),
+  const result = await postToGas('UPLOAD_FILE', {
+    ...meta,
+    fileName: file.name,
+    mimeType: file.type || 'application/octet-stream',
+    base64,
   });
-  const json = await res.json().catch(() => null);
-  if (!json || !json.success || !json.result?.url) {
-    throw new Error(json?.error || '上傳至 Google 雲端失敗，請確認 Apps Script 已重新部署');
+  if (!result?.url) {
+    throw new Error('上傳至 Google 雲端失敗：Apps Script 沒有回傳檔案連結，請確認已用「新版本」重新部署');
   }
-  return json.result.url as string;
+  const sheet = result.sheet;
+  if (meta.caseId && sheet) {
+    // 試算表已更新，下次讀取要拿最新資料
+    lastCasesFetchAt = 0;
+  }
+  return {
+    url: String(result.url),
+    sheetUpdated: !!(sheet && sheet.success !== false),
+    sheetError: sheet && sheet.success === false ? sheet.message : undefined,
+  };
 }
 
 export interface SheetSyncStatus {
@@ -629,7 +633,7 @@ export const standaloneStore = {
 
     const stages: Array<{ code: string; label: string }> = [
       { code: 'UNREACHED', label: '未達催帳天數 (<30天)' },
-      { code: 'STAGE_1', label: '第一階段：2C勸導 (30-50天)' },
+      { code: 'STAGE_1', label: '第一階段：CS勸導 (30-50天)' },
       { code: 'STAGE_2', label: '第二階段：FA存證催告 (50-80天)' },
       { code: 'STAGE_3', label: '第三階段：FA終止合約 (>80天)' },
       { code: 'STAGE_4', label: '第四階段：待呆帳沖銷 (終止滿15天)' },
