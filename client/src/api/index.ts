@@ -1,6 +1,6 @@
 import api from './client';
 import type { BusinessUnit, DashboardOverview, CaseRecord, WhitelistItem, User, Role } from '../types';
-import { standaloneStore } from './standaloneStore';
+import { standaloneStore, loadCasesFromSheet } from './standaloneStore';
 
 export const authApi = {
   loginWithGoogle: async (payload: string | { credential?: string; email?: string; name?: string; avatarUrl?: string }) => {
@@ -50,6 +50,7 @@ export const dashboardApi = {
       });
       return res.data;
     } catch {
+      await loadCasesFromSheet();
       return standaloneStore.getDashboardOverview(businessUnit);
     }
   },
@@ -87,16 +88,19 @@ export const casesApi = {
       }>('/cases', { params });
       return res.data;
     } catch {
-      let items = standaloneStore.getCases();
+      const allCases = await loadCasesFromSheet();
+      let items = allCases;
       if (params.businessUnit) items = items.filter((c) => c.businessUnit === params.businessUnit);
       if (params.stage) items = items.filter((c) => c.stage === params.stage);
       if (params.statusTag) items = items.filter((c) => c.statusTag === params.statusTag);
       if (params.search) {
         const s = params.search.toLowerCase();
-        items = items.filter((c) => c.name.toLowerCase().includes(s) || c.uid.toLowerCase().includes(s));
+        items = items.filter(
+          (c) => c.name.toLowerCase().includes(s) || c.uid.toLowerCase().includes(s) || c.id.toLowerCase().includes(s)
+        );
       }
       const totalAmountSum = items.reduce((sum, c) => sum + c.outstandingAmount, 0);
-      const pendingConfirmationCount = standaloneStore.getCases().filter(
+      const pendingConfirmationCount = allCases.filter(
         (c) => (!params.businessUnit || c.businessUnit === params.businessUnit) && !c.isClosed && c.statusTag === 'PENDING_CONFIRMATION'
       ).length;
 
@@ -118,7 +122,8 @@ export const casesApi = {
       const res = await api.get<{ case: CaseRecord }>(`/cases/${id}`);
       return res.data.case;
     } catch {
-      const found = standaloneStore.getCases().find((c) => c.id === id);
+      let found = standaloneStore.getCases().find((c) => c.id === id);
+      if (!found) found = (await loadCasesFromSheet(true)).find((c) => c.id === id);
       if (!found) throw new Error('Case not found');
       return found;
     }
@@ -128,7 +133,7 @@ export const casesApi = {
       const res = await api.patch<{ message: string; case: CaseRecord }>(`/cases/${id}/2c`, data);
       return res.data;
     } catch {
-      const updated = standaloneStore.updateCase2C(id, data);
+      const updated = await standaloneStore.updateCase2C(id, data);
       return { message: '更新成功', case: updated };
     }
   },
@@ -137,7 +142,7 @@ export const casesApi = {
       const res = await api.patch<{ message: string; case: CaseRecord }>(`/cases/${id}/fa`, data);
       return res.data;
     } catch {
-      const updated = standaloneStore.updateCaseFA(id, data);
+      const updated = await standaloneStore.updateCaseFA(id, data);
       return { message: '更新成功', case: updated };
     }
   },
@@ -146,7 +151,7 @@ export const casesApi = {
       const res = await api.patch<{ message: string; case: CaseRecord }>(`/cases/${id}/close`, data);
       return res.data;
     } catch {
-      const updated = standaloneStore.closeCase(id, data);
+      const updated = await standaloneStore.closeCase(id, data);
       return { message: '結案狀態已更新', case: updated };
     }
   },

@@ -10,24 +10,6 @@ export const DEFAULT_GAS_URL =
 export const DEFAULT_DEBT_BACKUP_GAS_URL =
   'https://script.google.com/macros/s/AKfycbzbayhWa_N7qzx_jhw7R9uRp1v6itw7zK8amzcbdEXHMP96mt91dXaPnUPhuEj9JvcR/exec';
 
-function syncUpdateToGas(businessUnit: string, uid: string, fields: Record<string, any>) {
-  if (!DEFAULT_DEBT_BACKUP_GAS_URL) return;
-  try {
-    fetch(DEFAULT_DEBT_BACKUP_GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'UPDATE_ROW_STATUS',
-        businessUnit,
-        uid,
-        fields,
-      }),
-    }).catch((e) => console.warn('[GAS Sync] 試算表同步回寫略過:', e.message));
-  } catch (e) {
-    // ignore
-  }
-}
-
 /**
  * 上傳檔案至 Google 雲端（試算表所在資料夾的「2bad-debtbackup 附件」），回傳檔案連結
  */
@@ -102,6 +84,117 @@ async function postToGas(action: string, payload: Record<string, any>): Promise<
   return json.result;
 }
 
+// ==============================================================================
+// 案件資料：以 Google 試算表（Valet/Pepper扣款失敗通知追蹤）為唯一資料來源
+// 所有使用者讀寫同一份試算表，瀏覽器只保留一份快取，離線時才使用
+// ==============================================================================
+
+const CASES_CACHE_TTL_MS = 5 * 1000;
+let lastCasesFetchAt = 0;
+let inflightCasesFetch: Promise<CaseRecord[]> | null = null;
+let lastCasesError: string | null = null;
+
+const str = (v: any): string => (v === null || v === undefined ? '' : String(v).trim());
+const strOrNull = (v: any): string | null => str(v) || null;
+const num = (v: any): number => {
+  const n = Number(str(v).replace(/[,\s$NT]/g, ''));
+  return isNaN(n) ? 0 : n;
+};
+
+/** 試算表一列 → 前端案件資料 */
+function sheetRowToCase(r: any): CaseRecord {
+  const isClosed = r.isClosed === true;
+  const outstandingDays = num(r.outstandingDays);
+  const terminationNoticeDate = strOrNull(r.terminationNoticeDate);
+  const updatedAt = str(r.updatedAt);
+  return {
+    id: str(r.caseId) || `${r.businessUnit}-${str(r.uid)}`,
+    uid: str(r.uid),
+    name: str(r.name) || `客戶-${str(r.uid)}`,
+    email: strOrNull(r.email),
+    phone: strOrNull(r.phone),
+    businessUnit: r.businessUnit as BusinessUnit,
+    outstandingAmount: num(r.amount),
+    outstandingDays,
+    billDate: strOrNull(r.billDate),
+    address: strOrNull(r.address),
+    serviceType: strOrNull(r.serviceType),
+    statusTag: r.statusTag === 'PENDING_CONFIRMATION' ? 'PENDING_CONFIRMATION' : 'NORMAL',
+    // 階段一律依逾期天數與終止日重新計算，避免試算表手動輸入的文字造成誤判
+    stage: computeStage({ isClosed, outstandingDays, terminationNoticeDate }),
+    isClosed,
+    closedDate: strOrNull(r.closedDate),
+    collectionStartDate: strOrNull(r.collectionStartDate),
+    lineNoticeDate: strOrNull(r.lineNoticeDate),
+    emailNoticeDate: strOrNull(r.emailNoticeDate),
+    smsNoticeDate: strOrNull(r.smsNoticeDate),
+    phoneNoticeDate: strOrNull(r.phoneNoticeDate),
+    twoCNotes: strOrNull(r.twoCNotes),
+    demandMethod: r.demandMethod === 'EMAIL' || r.demandMethod === 'CERTIFIED_LETTER' ? r.demandMethod : null,
+    demandSmsDate: strOrNull(r.demandSmsDate),
+    demandDocUrl: strOrNull(r.demandDocUrl),
+    demandNoticeDate: strOrNull(r.demandNoticeDate),
+    demandDueDate: strOrNull(r.demandDueDate),
+    terminationSmsDate: strOrNull(r.terminationSmsDate),
+    terminationNoticeDate,
+    terminationDueDate: strOrNull(r.terminationDueDate),
+    certifiedLetterSentDate: strOrNull(r.certifiedLetterSentDate),
+    certifiedLetterReceivedDate: strOrNull(r.certifiedLetterReceivedDate),
+    faNotes: strOrNull(r.faNotes),
+    lastImportedAt: updatedAt,
+    createdAt: strOrNull(r.collectionStartDate) || updatedAt,
+    updatedAt,
+  };
+}
+
+/** 最近一次從試算表讀取失敗的原因（成功時為 null） */
+export function getCasesSyncError(): string | null {
+  return lastCasesError;
+}
+
+/**
+ * 從 Google 試算表讀取最新案件；5 秒內重複呼叫直接用快取
+ * 讀取失敗時沿用瀏覽器快取，並記錄錯誤原因
+ */
+export async function loadCasesFromSheet(force = false): Promise<CaseRecord[]> {
+  if (!force && Date.now() - lastCasesFetchAt < CASES_CACHE_TTL_MS) {
+    return standaloneStore.getCases();
+  }
+  if (inflightCasesFetch) return inflightCasesFetch;
+  inflightCasesFetch = (async () => {
+    try {
+      const result = await postToGas('LIST_CASES', {});
+      const cases: CaseRecord[] = (result?.cases || [])
+        .filter((r: any) => str(r.uid))
+        .map(sheetRowToCase);
+      standaloneStore.saveCases(cases);
+      lastCasesFetchAt = Date.now();
+      lastCasesError = null;
+      return cases;
+    } catch (e: any) {
+      lastCasesError = e?.message || '讀取 Google 試算表失敗';
+      console.warn('[GAS Sync] 讀取案件失敗，改用瀏覽器快取：', lastCasesError);
+      return standaloneStore.getCases();
+    } finally {
+      inflightCasesFetch = null;
+    }
+  })();
+  return inflightCasesFetch;
+}
+
+/** 依案件ID回寫試算表；失敗會丟出錯誤，確保使用者知道沒存成功 */
+async function writeCaseToSheet(c: CaseRecord, fields: Record<string, any>) {
+  const result = await postToGas('UPDATE_ROW_STATUS', {
+    businessUnit: c.businessUnit,
+    uid: c.uid,
+    caseId: c.id,
+    fields,
+  });
+  if (result && result.success === false) {
+    throw new Error(result.message || '回寫 Google 試算表失敗');
+  }
+}
+
 /** 原始報表列整理：日期轉 yyyy-MM-dd、補齊欄數、去除整列空白 */
 function sanitizeRawRows(headers: string[], rows: any[][]): any[][] {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -118,6 +211,8 @@ function sanitizeRawRows(headers: string[], rows: any[][]): any[][] {
     )
     .filter((r) => r.some((v) => String(v).trim() !== ''));
 }
+
+let lastSyncSummary: any = null;
 
 let lastReportSync: null | {
   businessUnit: BusinessUnit;
@@ -137,13 +232,16 @@ async function syncReportToSheet(job: NonNullable<typeof lastReportSync>): Promi
     const summary = await postToGas('SYNC_SUMMARY_TRACKING', {
       businessUnit: job.businessUnit,
       items: job.items,
+      markMissingAsPending: true,
     });
     lastReportSync = null;
+    lastSyncSummary = summary;
+    await loadCasesFromSheet(true);
     return {
       ok: true,
       message: `已寫入「${raw?.sheetName ?? '原始報表'}」${raw?.rowCount ?? job.rows.length} 列；「${
         summary?.sheetName ?? '追蹤表'
-      }」更新 ${summary?.updatedCount ?? 0} 筆、新增 ${summary?.newCount ?? 0} 筆`,
+      }」更新 ${summary?.updatedCount ?? 0} 筆、新增 ${summary?.newCount ?? 0} 筆、轉待確認 ${summary?.pendingCount ?? 0} 筆`,
     };
   } catch (e: any) {
     console.error('[GAS Sync] 報表回寫失敗', e);
@@ -189,192 +287,6 @@ const DEFAULT_WHITELIST: WhitelistItem[] = [
     email: 'andy.chen@boxful.com.tw',
     role: 'TWO_C_TEAM',
     note: '2C Team 催款專員 (可上傳週報)',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
-
-const INITIAL_CASES: CaseRecord[] = [
-  {
-    id: 'c-v-1',
-    uid: 'V-2607-001',
-    name: '陳國華',
-    email: 'guohua.chen@boxful.com.tw',
-    phone: '0928-111-222',
-    businessUnit: 'VALET',
-    outstandingAmount: 18500,
-    outstandingDays: 68,
-    billDate: '2026-07-02',
-    collectionStartDate: '2026-07-10',
-    stage: 'STAGE_2',
-    isClosed: false,
-    lineNoticeDate: '2026-07-12',
-    lineStatus: '已讀未回',
-    emailNoticeDate: '2026-07-18',
-    phoneNoticeDate: '2026-07-25',
-    phoneStatus: '承諾7月底繳款，逾期未繳',
-    demandNoticeDate: '2026-08-20',
-    demandDueDate: '2026-09-05',
-    demandDocUrl: 'https://docs.google.com/document/d/1valet-demand-chen',
-    twoCNotes: '客戶電話中態度消極，轉交 FA 進行第二階段催告',
-    faNotes: '已寄送存證信函/催告函，待到期日追蹤',
-    lastImportedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'c-v-2',
-    uid: 'V-2607-002',
-    name: '林雅慧',
-    email: 'yahui.lin@boxful.com.tw',
-    phone: '0935-333-444',
-    businessUnit: 'VALET',
-    outstandingAmount: 45000,
-    outstandingDays: 88,
-    billDate: '2026-07-05',
-    collectionStartDate: '2026-07-15',
-    stage: 'STAGE_3',
-    isClosed: false,
-    lineNoticeDate: '2026-07-16',
-    demandNoticeDate: '2026-08-25',
-    demandDueDate: '2026-09-08',
-    demandDocUrl: 'https://docs.google.com/document/d/1valet-demand-lin',
-    terminationNoticeDate: '2026-09-02',
-    terminationDocUrl: 'https://docs.google.com/document/d/1valet-term-lin',
-    twoCNotes: 'Line封鎖，電話空號',
-    faNotes: '滿80天發送終止函，等待15天期滿',
-    lastImportedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'c-v-3',
-    uid: 'V-2608-001',
-    name: '黃志強',
-    email: 'chihchiang.huang@boxful.com.tw',
-    phone: '0912-888-999',
-    businessUnit: 'VALET',
-    outstandingAmount: 12000,
-    outstandingDays: 42,
-    billDate: '2026-08-01',
-    collectionStartDate: '2026-08-10',
-    stage: 'STAGE_1',
-    isClosed: false,
-    lineNoticeDate: '2026-08-10',
-    lineStatus: '已回覆會於發薪日繳納',
-    twoCNotes: '預計補繳，持續觀察中',
-    lastImportedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'c-v-4',
-    uid: 'V-2608-002',
-    name: '張淑芬',
-    email: 'shufen.chang@boxful.com.tw',
-    phone: '0958-666-777',
-    businessUnit: 'VALET',
-    outstandingAmount: 23400,
-    outstandingDays: 52,
-    billDate: '2026-08-03',
-    collectionStartDate: '2026-08-12',
-    stage: 'STAGE_2',
-    isClosed: false,
-    lineNoticeDate: '2026-08-12',
-    demandNoticeDate: '2026-09-01',
-    demandDueDate: '2026-09-15',
-    demandDocUrl: 'https://docs.google.com/document/d/1valet-demand-chang',
-    twoCNotes: '多次未接聽',
-    faNotes: '已發出催告通知',
-    lastImportedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'c-v-5',
-    uid: 'V-2609-001',
-    name: '周建明',
-    email: 'chienming.chou@boxful.com.tw',
-    phone: '0972-555-666',
-    businessUnit: 'VALET',
-    outstandingAmount: 8800,
-    outstandingDays: 32,
-    billDate: '2026-09-01',
-    collectionStartDate: '2026-09-05',
-    stage: 'STAGE_1',
-    isClosed: false,
-    lineNoticeDate: '2026-09-05',
-    lineStatus: '已傳送第一階段勸導通知',
-    twoCNotes: '首次通知',
-    lastImportedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'c-v-6',
-    uid: 'V-2609-002',
-    name: '許美玲',
-    email: 'meiling.hsu@boxful.com.tw',
-    phone: '0988-222-333',
-    businessUnit: 'VALET',
-    outstandingAmount: 16000,
-    outstandingDays: 35,
-    billDate: '2026-09-02',
-    collectionStartDate: '2026-09-06',
-    stage: 'CLOSED',
-    isClosed: true,
-    closedDate: '2026-09-08',
-    lineNoticeDate: '2026-09-06',
-    lineStatus: '收到通知後即刻匯款',
-    twoCNotes: '2C Line 通知後已結案',
-    lastImportedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  // PEPPER (Self-Storage) cases
-  {
-    id: 'c-p-1',
-    uid: 'P-2607-001',
-    name: '極品咖啡館',
-    email: 'premium.cafe@gmail.com',
-    phone: '0966-123-987',
-    businessUnit: 'PEPPER',
-    outstandingAmount: 48000,
-    outstandingDays: 82,
-    billDate: '2026-07-01',
-    collectionStartDate: '2026-07-08',
-    stage: 'STAGE_3',
-    isClosed: false,
-    lineNoticeDate: '2026-07-09',
-    demandNoticeDate: '2026-08-15',
-    demandDueDate: '2026-08-30',
-    demandDocUrl: 'https://docs.google.com/document/d/1pepper-demand-cafe',
-    terminationNoticeDate: '2026-09-03',
-    terminationDocUrl: 'https://docs.google.com/document/d/1pepper-term-cafe',
-    faNotes: '已寄送終止合約通知函',
-    lastImportedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'c-p-2',
-    uid: 'P-2608-001',
-    name: '饗樂燒肉殿',
-    email: 'feast.yakiniku@gmail.com',
-    phone: '0977-888-111',
-    businessUnit: 'PEPPER',
-    outstandingAmount: 64000,
-    outstandingDays: 55,
-    billDate: '2026-08-05',
-    collectionStartDate: '2026-08-15',
-    stage: 'STAGE_2',
-    isClosed: false,
-    lineNoticeDate: '2026-08-15',
-    demandNoticeDate: '2026-09-02',
-    demandDueDate: '2026-09-16',
-    demandDocUrl: 'https://docs.google.com/document/d/1pepper-demand-yakiniku',
-    faNotes: 'FA 催告期，等待回覆中',
-    lastImportedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -630,66 +542,63 @@ export const standaloneStore = {
   },
 
   // Cases Operations
+  // 瀏覽器快取（最新資料請用 loadCasesFromSheet 從試算表讀取）
   getCases: (): CaseRecord[] => {
     try {
       const saved = localStorage.getItem(CASES_STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch (e) {
       console.warn('Error reading cases from localStorage', e);
     }
-    localStorage.setItem(CASES_STORAGE_KEY, JSON.stringify(INITIAL_CASES));
-    return INITIAL_CASES;
+    return [];
   },
 
   saveCases: (cases: CaseRecord[]) => {
-    localStorage.setItem(CASES_STORAGE_KEY, JSON.stringify(cases));
+    try {
+      localStorage.setItem(CASES_STORAGE_KEY, JSON.stringify(cases));
+    } catch (e) {
+      console.warn('Error saving cases to localStorage', e);
+    }
   },
 
-  updateCase2C: (id: string, data: Partial<CaseRecord>): CaseRecord => {
+  /** 先寫入試算表，成功後再更新畫面；其他人重新整理即可看到 */
+  updateCaseFields: async (id: string, data: Partial<CaseRecord>): Promise<CaseRecord> => {
     const cases = standaloneStore.getCases();
     const index = cases.findIndex((c) => c.id === id);
-    if (index >= 0) {
-      cases[index] = { ...cases[index], ...data, updatedAt: new Date().toISOString() };
-      standaloneStore.saveCases(cases);
-      syncUpdateToGas(cases[index].businessUnit, cases[index].uid, data);
-      return cases[index];
-    }
-    throw new Error('找不到該案件');
+    if (index < 0) throw new Error('找不到該案件，請重新整理頁面');
+    await writeCaseToSheet(cases[index], data);
+    const fresh = await loadCasesFromSheet(true);
+    const updated = fresh.find((c) => c.id === id);
+    if (updated) return updated;
+    cases[index] = { ...cases[index], ...data, updatedAt: new Date().toISOString() };
+    standaloneStore.saveCases(cases);
+    return cases[index];
   },
 
-  updateCaseFA: (id: string, data: Partial<CaseRecord>): CaseRecord => {
-    const cases = standaloneStore.getCases();
-    const index = cases.findIndex((c) => c.id === id);
-    if (index >= 0) {
-      cases[index] = { ...cases[index], ...data, updatedAt: new Date().toISOString() };
-      standaloneStore.saveCases(cases);
-      syncUpdateToGas(cases[index].businessUnit, cases[index].uid, data);
-      return cases[index];
-    }
-    throw new Error('找不到該案件');
-  },
+  updateCase2C: (id: string, data: Partial<CaseRecord>) => standaloneStore.updateCaseFields(id, data),
 
-  closeCase: (id: string, data: { isClosed: boolean; closedDate?: string | null }): CaseRecord => {
-    const cases = standaloneStore.getCases();
-    const index = cases.findIndex((c) => c.id === id);
-    if (index >= 0) {
-      cases[index] = {
-        ...cases[index],
-        isClosed: data.isClosed,
-        closedDate: data.isClosed ? data.closedDate || new Date().toISOString() : null,
-        stage: data.isClosed ? 'CLOSED' : cases[index].stage,
-        statusTag: data.isClosed ? 'NORMAL' : cases[index].statusTag,
-        updatedAt: new Date().toISOString(),
-      };
-      standaloneStore.saveCases(cases);
-      syncUpdateToGas(cases[index].businessUnit, cases[index].uid, {
-        isClosed: data.isClosed,
-        closedDate: cases[index].closedDate,
-        stage: cases[index].stage,
-      });
-      return cases[index];
+  updateCaseFA: (id: string, data: Partial<CaseRecord>) => standaloneStore.updateCaseFields(id, data),
+
+  closeCase: (id: string, data: { isClosed: boolean; closedDate?: string | null }) => {
+    if (!data.isClosed) {
+      // 同一位客戶已經有另一筆未結案案件時，不允許重新開啟舊案，避免同 UID 出現兩筆追蹤中案件
+      const cases = standaloneStore.getCases();
+      const target = cases.find((c) => c.id === id);
+      const other = target && cases.find(
+        (c) => c.id !== id && !c.isClosed && c.uid === target.uid && c.businessUnit === target.businessUnit
+      );
+      if (other) {
+        return Promise.reject(new Error(`此客戶已有追蹤中的案件（${other.id}），無法重新開啟舊案件`));
+      }
     }
-    throw new Error('找不到該案件');
+    return standaloneStore.updateCaseFields(id, {
+      isClosed: data.isClosed,
+      closedDate: data.isClosed ? data.closedDate || new Date().toISOString().split('T')[0] : null,
+      statusTag: data.isClosed ? 'NORMAL' : undefined,
+    });
   },
 
   // Dashboard Overview computation
@@ -829,91 +738,8 @@ export const standaloneStore = {
       throw new Error('檔案中未能解析出有效資料，請確認欄位包含 UID/客戶編號 及 逾期天數/金額');
     }
 
-    const allCases = standaloneStore.getCases();
-    let newCount = 0;
-    let updatedCount = 0;
-    const currentBatchUids = new Set<string>();
-
-    for (const [uid, item] of aggregatedMap.entries()) {
-      currentBatchUids.add(uid);
-      const existingActiveIndex = allCases.findIndex(
-        (c) => c.businessUnit === businessUnit && c.uid === uid && !c.isClosed
-      );
-
-      if (existingActiveIndex >= 0) {
-        const existingActive = allCases[existingActiveIndex];
-        const stage = computeStage({
-          isClosed: false,
-          outstandingDays: item.outstandingDays,
-          terminationNoticeDate: existingActive.terminationNoticeDate,
-        });
-
-        allCases[existingActiveIndex] = {
-          ...existingActive,
-          name: item.name || existingActive.name,
-          email: item.email || existingActive.email,
-          phone: item.phone || existingActive.phone,
-          address: item.address || existingActive.address,
-          serviceType: item.serviceType || existingActive.serviceType,
-          outstandingAmount: item.totalOutstandingAmount,
-          outstandingDays: item.outstandingDays,
-          billDate: item.billDate || existingActive.billDate,
-          invId: item.invId || existingActive.invId,
-          blueCode: item.blueCode || existingActive.blueCode,
-          stage,
-          statusTag: 'NORMAL',
-          lastImportedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        updatedCount++;
-      } else {
-        const initialStage = computeStage({
-          isClosed: false,
-          outstandingDays: item.outstandingDays,
-        });
-
-        const newCase: CaseRecord = {
-          id: `case-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          uid: item.uid,
-          name: item.name,
-          email: item.email || null,
-          phone: item.phone || null,
-          businessUnit,
-          outstandingAmount: item.totalOutstandingAmount,
-          outstandingDays: item.outstandingDays,
-          billDate: item.billDate || null,
-          address: item.address || null,
-          serviceType: item.serviceType || null,
-          invId: item.invId || null,
-          blueCode: item.blueCode || null,
-          stage: initialStage,
-          statusTag: 'NORMAL',
-          isClosed: false,
-          collectionStartDate: new Date().toISOString().split('T')[0],
-          lastImportedAt: new Date().toISOString(),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        allCases.unshift(newCase);
-        newCount++;
-      }
-    }
-
-    // 處理本次報表未出現但系統中仍在追蹤的案件 -> 標記為待確認結案 (PENDING_CONFIRMATION)
-    let pendingConfirmationCount = 0;
-    for (let i = 0; i < allCases.length; i++) {
-      const c = allCases[i];
-      if (c.businessUnit === businessUnit && !c.isClosed && !currentBatchUids.has(c.uid)) {
-        allCases[i] = {
-          ...c,
-          statusTag: 'PENDING_CONFIRMATION',
-          updatedAt: new Date().toISOString(),
-        };
-        pendingConfirmationCount++;
-      }
-    }
-
-    standaloneStore.saveCases(allCases);
+    const newCount = 0;
+    const updatedCount = 0;
 
     let uName = '使用者';
     try {
@@ -942,9 +768,8 @@ export const standaloneStore = {
       console.warn('Failed to save import history:', e);
     }
 
-    // 回寫 Google 試算表 (2bad-debtbackup)：依序覆蓋原始報表、同步追蹤清單，並檢查結果
-
-    // 2. 同步追蹤清單
+    // 回寫 Google 試算表 (2bad-debtbackup)：覆蓋原始報表，再由 Apps Script 比對追蹤表
+    // （同 UID 未結案 → 更新；已結案或首次欠款 → 新增一列並給新案件ID；不在報表中 → 待確認是否結案）
     const summaryItems = Array.from(aggregatedMap.values()).map((c) => ({
       uid: c.uid,
       name: c.name,
@@ -952,29 +777,12 @@ export const standaloneStore = {
       phone: c.phone || '',
       serviceType: c.serviceType || '',
       address: c.address || '',
+      billDate: c.billDate || '',
       outstandingDays: c.outstandingDays,
       totalOutstandingAmount: c.totalOutstandingAmount,
       stage: computeStage({ isClosed: false, outstandingDays: c.outstandingDays }),
       statusTag: 'NORMAL',
     }));
-
-    // 亦將待確認結案的清單帶上
-    allCases
-      .filter((c) => c.businessUnit === businessUnit && !c.isClosed && c.statusTag === 'PENDING_CONFIRMATION')
-      .forEach((c) => {
-        summaryItems.push({
-          uid: c.uid,
-          name: c.name,
-          email: c.email || '',
-          phone: c.phone || '',
-          serviceType: c.serviceType || '',
-          address: c.address || '',
-          outstandingDays: c.outstandingDays,
-          totalOutstandingAmount: c.outstandingAmount,
-          stage: c.stage,
-          statusTag: 'PENDING_CONFIRMATION',
-        });
-      });
 
     const sheetSync = await syncReportToSheet({
       businessUnit,
@@ -983,13 +791,26 @@ export const standaloneStore = {
       items: summaryItems,
     });
 
+    // 寫入失敗時保留 sheetSync 錯誤，上傳視窗會顯示「重新同步到試算表」按鈕
+    const summary = sheetSync.ok ? lastSyncSummary || {} : {};
+
+    // 更新匯入歷史中的筆數
+    try {
+      const history = standaloneStore.getImportHistory();
+      if (history[0]) {
+        history[0].newCases = summary.newCount ?? 0;
+        history[0].updatedCases = summary.updatedCount ?? 0;
+        localStorage.setItem(IMPORT_HISTORY_STORAGE_KEY, JSON.stringify(history));
+      }
+    } catch {}
+
     return {
-      message: `成功匯入 ${businessUnit} 報表！新增 ${newCount} 筆，更新 ${updatedCount} 筆`,
+      message: `成功匯入 ${businessUnit} 報表！新增 ${summary.newCount ?? 0} 筆，更新 ${summary.updatedCount ?? 0} 筆`,
       result: {
         totalCount: parsedRawRows.length,
-        newCount,
-        updatedCount,
-        pendingConfirmationCount,
+        newCount: summary.newCount ?? 0,
+        updatedCount: summary.updatedCount ?? 0,
+        pendingConfirmationCount: summary.pendingCount ?? 0,
         errorCount: 0,
         errors: [],
         sheetSync,

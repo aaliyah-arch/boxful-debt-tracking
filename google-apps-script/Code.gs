@@ -13,6 +13,9 @@
  *        到期日期 ← 電子催告日期   = 催告到期日
  *        到期日期 ← 服務終止日     = 服務終止到期日期
  * 3. 同一客戶先前已結案又再欠款：保留舊列，新增一列追蹤未結案那筆。
+ *    每一列有唯一的「案件ID」（格式：UID-01、UID-02…），前端回寫一律依案件ID找列，
+ *    不會再寫到同 UID 的其他案件。案件ID空白的舊列會在下一次呼叫時自動補號。
+ * 5. LIST_CASES：前端從試算表讀取全部案件，所有使用者看到的都是同一份資料。
  * 4. 前端上傳的電子催告檔會存到試算表所在資料夾下的「2bad-debtbackup 附件」資料夾，
  *    並把檔案連結回填到對應欄位。
  */
@@ -24,7 +27,7 @@ var SHEET_NAMES = {
   PEPPER_TRACKING: 'Pepper扣款失敗通知追蹤'
 };
 
-var SCRIPT_VERSION = '2026-10-12';
+var SCRIPT_VERSION = '2026-10-16';
 var UPLOAD_FOLDER_NAME = '2bad-debtbackup 附件';
 
 /**
@@ -40,6 +43,7 @@ var UPLOAD_FOLDER_NAME = '2bad-debtbackup 附件';
  */
 var FIELD_SPECS = [
   // ---- 報表彙整欄位 ----
+  { key: 'caseId',         names: ['案件ID', '案件編號', 'Case ID'], append: true },
   { key: 'uid',            names: ['UID'] },
   { key: 'serviceType',    names: ['Type of Service', 'Service Type', '服務類型'], valetOnly: true },
   { key: 'name',           names: ['NAME', 'Name', '姓名', '客戶名稱'] },
@@ -59,6 +63,8 @@ var FIELD_SPECS = [
   { key: 'phoneNoticeDate',names: ['電話日期', '電話通知日'], date: true },
   { key: 'twoCNotes',      names: ['處理方式/客人回應', '2C催帳備註'], append: true },
   { key: 'closedDate',     names: ['結案日期'], date: true, append: true },
+  { key: 'billDate',       names: ['帳單日', '帳單日期'], date: true, append: true },
+  { key: 'collectionStartDate', names: ['開始催帳日', '開始催帳日期'], date: true, append: true },
 
   // ---- 催告與終止 ----
   { key: 'demandMethod',          names: ['催告方式'], append: true },
@@ -78,11 +84,11 @@ var FIELD_SPECS = [
 
 // 新建立追蹤表時使用的預設表頭（已存在的工作表不會被改動）
 var DEFAULT_TRACKING_HEADERS = {
-  VALET: ['UID', 'Type of Service', 'NAME', 'Outstanding Days', 'Email', '地址', 'Total Outstanding Amount', 'Phone',
+  VALET: ['案件ID', 'UID', 'Type of Service', 'NAME', 'Outstanding Days', 'Email', '地址', 'Total Outstanding Amount', 'Phone',
           '催帳階段/狀態', '追蹤標籤', '結案狀態', 'LINE日期', '寄信日期', '寄簡訊日期', '處理方式/客人回應', '結案日期',
           '催告方式', '電子催告簡訊日期', '電子催告檔', '到期日期', '電子催告日期', '終止簡訊通知',
           '到期日期', '服務終止日', '存證信函', '收件日期', '最後更新時間'],
-  PEPPER: ['UID', 'NAME', 'Email', 'Outstanding Days', 'Total Outstanding Amount', 'Phone',
+  PEPPER: ['案件ID', 'UID', 'NAME', 'Email', 'Outstanding Days', 'Total Outstanding Amount', 'Phone',
            '催帳階段/狀態', '追蹤標籤', '結案狀態', 'LINE日期', '寄信日期', '寄簡訊日期', '處理方式/客人回應', '結案日期',
            '催告方式', '電子催告簡訊日期', '電子催告檔', '到期日期', '電子催告日期', '終止簡訊通知',
            '到期日期', '服務終止日', '存證信函', '收件日期', '最後更新時間']
@@ -110,9 +116,11 @@ function doPost(e) {
     if (action === 'OVERWRITE_RAW_REPORT') {
       result = handleOverwriteRawReport(ss, businessUnit, payload.headers, payload.rows);
     } else if (action === 'SYNC_SUMMARY_TRACKING') {
-      result = handleSyncSummaryTracking(ss, businessUnit, payload.items || []);
+      result = handleSyncSummaryTracking(ss, businessUnit, payload.items || [], payload.markMissingAsPending === true);
     } else if (action === 'UPDATE_ROW_STATUS') {
-      result = handleUpdateRowStatus(ss, businessUnit, payload.uid, payload.fields || {});
+      result = handleUpdateRowStatus(ss, businessUnit, payload.uid, payload.fields || {}, payload.caseId);
+    } else if (action === 'LIST_CASES') {
+      result = handleListCases(ss, payload.businessUnit ? [businessUnit] : ['VALET', 'PEPPER']);
     } else if (action === 'UPLOAD_FILE') {
       result = handleUploadFile(ss, payload);
     } else {
@@ -275,14 +283,62 @@ function asText(val) {
 
 function isClosedRow(row, col) {
   if (col.isClosed !== -1) {
-    var v = String(row[col.isClosed] || '').trim();
-    return v === '已結案' || v === '結案' || v.toLowerCase() === 'true';
+    var v = String(row[col.isClosed] == null ? '' : row[col.isClosed]).trim();
+    if (v === '已結案' || v === '結案' || v.toLowerCase() === 'true') return true;
+    if (v !== '') return false; // 明確填了其他值（例如「未結案」）
   }
-  // 沒有「結案狀態」欄時，以「結案日期」有值視為已結案
+  // 「結案狀態」欄不存在或空白時，以「結案日期」有值視為已結案
   if (col.closedDate !== -1) {
-    return String(row[col.closedDate] || '').trim() !== '';
+    return String(row[col.closedDate] == null ? '' : row[col.closedDate]).trim() !== '';
   }
   return false;
+}
+
+/**
+ * 為「案件ID」空白的列補號（格式：UID-01、UID-02…，依列的先後順序）
+ * values 為第 2 列起的資料（會直接修改），回傳是否有補號
+ */
+function assignCaseIds(sheet, cols, values) {
+  var col = cols.col;
+  if (col.caseId === -1) ensureColumn(sheet, cols, 'caseId');
+  var c = col.caseId;
+  if (c === -1 || values.length === 0) return false;
+  values.forEach(function (r) { while (r.length <= c) r.push(''); });
+
+  var maxSeq = {};
+  values.forEach(function (r) {
+    var id = String(r[c] || '').trim();
+    var m = id.match(/^(.*)-(\d+)$/);
+    if (m) maxSeq[m[1]] = Math.max(maxSeq[m[1]] || 0, Number(m[2]));
+  });
+
+  var changed = false;
+  values.forEach(function (r) {
+    var uid = String(r[col.uid] || '').trim();
+    if (!uid || String(r[c] || '').trim() !== '') return;
+    r[c] = nextCaseId(maxSeq, uid);
+    changed = true;
+  });
+
+  if (changed) {
+    sheet.getRange(2, c + 1, values.length, 1).setValues(values.map(function (r) { return [r[c]]; }));
+  }
+  return changed;
+}
+
+function nextCaseId(maxSeq, uid) {
+  maxSeq[uid] = (maxSeq[uid] || 0) + 1;
+  var n = maxSeq[uid];
+  return uid + '-' + (n < 10 ? '0' + n : String(n));
+}
+
+/** 讀取追蹤表全部資料列（第 2 列起），並補齊空白的案件ID */
+function readTrackingRows(sheet, cols) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+  var values = sheet.getRange(2, 1, lastRow - 1, cols.width).getValues();
+  assignCaseIds(sheet, cols, values);
+  return values;
 }
 
 function nowString() {
@@ -329,7 +385,7 @@ function handleOverwriteRawReport(ss, businessUnit, headers, rows) {
 // 2. 彙整並同步至追蹤工作表
 // ==============================================================================
 
-function handleSyncSummaryTracking(ss, businessUnit, items) {
+function handleSyncSummaryTracking(ss, businessUnit, items, markMissingAsPending) {
   var isValet = businessUnit === 'VALET';
   var sheetName = trackingSheetName(businessUnit);
   var sheet = getOrCreateSheet(ss, sheetName, DEFAULT_TRACKING_HEADERS[isValet ? 'VALET' : 'PEPPER']);
@@ -337,6 +393,8 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
   var col = cols.col;
   if (col.uid === -1) throw new Error('工作表「' + sheetName + '」找不到 UID 欄位，請確認第一列表頭有「UID」');
 
+  // 補齊會用到的欄位（案件ID、帳單日、開始催帳日）
+  ['caseId', 'billDate', 'collectionStartDate'].forEach(function (k) { ensureColumn(sheet, cols, k); });
   var width = cols.width;
   var lastRow = sheet.getLastRow();
   var values = [], formulas = [];
@@ -344,7 +402,14 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
     var range = sheet.getRange(2, 1, lastRow - 1, width);
     values = range.getValues();
     formulas = range.getFormulas();
+    assignCaseIds(sheet, cols, values);
   }
+
+  var maxSeq = {};
+  values.forEach(function (r) {
+    var m = String(r[col.caseId] || '').trim().match(/^(.*)-(\d+)$/);
+    if (m) maxSeq[m[1]] = Math.max(maxSeq[m[1]] || 0, Number(m[2]));
+  });
 
   var uidMap = {};
   values.forEach(function (r, i) {
@@ -354,12 +419,15 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
   });
 
   var nowStr = nowString();
-  var updatedCount = 0, newCount = 0, newRows = [];
+  var today = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
+  var updatedCount = 0, newCount = 0, pendingCount = 0, newRows = [];
+  var seenUids = {};
   var touchedCols = {}; // 有更新的欄位，最後整欄一次寫回（避免逐列寫入造成逾時）
 
   items.forEach(function (item) {
     var uid = String(item.uid || '').trim();
     if (!uid) return;
+    seenUids[uid] = true;
     var tag = item.statusTag === 'PENDING_CONFIRMATION' ? '待確認是否結案' : '正常追蹤';
     var phone = normalizePhone(item.phone);
 
@@ -385,6 +453,7 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
       }
       set('statusTag', tag);
       if (item.stage) set('stage', item.stage);
+      if (item.billDate && col.billDate !== -1 && !row[col.billDate]) set('billDate', normalizeDateValue(item.billDate));
       set('updatedAt', nowStr);
       updatedCount++;
     } else {
@@ -395,6 +464,7 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
         if (c === undefined || c === -1) return;
         newRow[c] = val;
       };
+      put('caseId', nextCaseId(maxSeq, uid));
       put('uid', uid);
       put('name', item.name || '');
       put('outstandingDays', item.outstandingDays);
@@ -408,11 +478,27 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
       put('stage', item.stage || 'STAGE_1');
       put('statusTag', tag);
       put('isClosed', '未結案');
+      put('billDate', normalizeDateValue(item.billDate || ''));
+      put('collectionStartDate', today);
       put('updatedAt', nowStr);
       newRows.push(newRow);
       newCount++;
     }
   });
+
+  // 本次報表沒有出現、且尚未結案的列 → 待確認是否結案（客人可能已付款）
+  if (markMissingAsPending && col.statusTag !== -1) {
+    values.forEach(function (r, i) {
+      var u = String(r[col.uid] || '').trim();
+      if (!u || seenUids[u] || isClosedRow(r, col)) return;
+      if (String(r[col.statusTag] || '').trim() === '待確認是否結案') return;
+      r[col.statusTag] = '待確認是否結案';
+      formulas[i][col.statusTag] = '';
+      touchedCols[col.statusTag] = true;
+      if (col.updatedAt !== -1) { r[col.updatedAt] = nowStr; formulas[i][col.updatedAt] = ''; touchedCols[col.updatedAt] = true; }
+      pendingCount++;
+    });
+  }
 
   // 既有列：只回寫有異動的欄位，每欄一次寫入；保留原公式，電話以文字寫入
   if (values.length > 0) {
@@ -432,14 +518,14 @@ function handleSyncSummaryTracking(ss, businessUnit, items) {
     sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, width).setValues(newRows);
   }
 
-  return { sheetName: sheetName, updatedCount: updatedCount, newCount: newCount, totalItems: items.length };
+  return { sheetName: sheetName, updatedCount: updatedCount, newCount: newCount, pendingCount: pendingCount, totalItems: items.length };
 }
 
 // ==============================================================================
 // 3. 前端單筆回寫
 // ==============================================================================
 
-function handleUpdateRowStatus(ss, businessUnit, uid, fields) {
+function handleUpdateRowStatus(ss, businessUnit, uid, fields, caseId) {
   var sheetName = trackingSheetName(businessUnit);
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet) throw new Error('找不到工作表: ' + sheetName);
@@ -449,12 +535,23 @@ function handleUpdateRowStatus(ss, businessUnit, uid, fields) {
   var col = cols.col;
   if (col.uid === -1) throw new Error('工作表「' + sheetName + '」找不到 UID 欄位');
 
-  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, cols.width).getValues();
+  var data = readTrackingRows(sheet, cols);
   var targetRow = -1;
-  for (var i = data.length - 1; i >= 0; i--) {
-    if (String(data[i][col.uid]).trim() !== String(uid).trim()) continue;
-    if (!isClosedRow(data[i], col)) { targetRow = i + 2; break; }
-    if (targetRow === -1) targetRow = i + 2; // 全部都已結案時取最新一列
+  if (caseId) {
+    // 依案件ID精準找列（同 UID 的其他案件不會被動到）
+    for (var k = 0; k < data.length; k++) {
+      if (String(data[k][col.caseId]).trim() === String(caseId).trim()) { targetRow = k + 2; break; }
+    }
+    if (targetRow === -1) {
+      throw new Error('在工作表「' + sheetName + '」找不到案件ID ' + caseId + '，請重新整理頁面後再試');
+    }
+  } else {
+    // 相容舊版前端：只有 UID 時，優先寫入未結案的列
+    for (var i = data.length - 1; i >= 0; i--) {
+      if (String(data[i][col.uid]).trim() !== String(uid).trim()) continue;
+      if (!isClosedRow(data[i], col)) { targetRow = i + 2; break; }
+      if (targetRow === -1) targetRow = i + 2; // 全部都已結案時取最新一列
+    }
   }
   if (targetRow === -1) {
     return { success: false, message: '在工作表中找不到 UID ' + uid + ' 的對應列' };
@@ -464,7 +561,7 @@ function handleUpdateRowStatus(ss, businessUnit, uid, fields) {
   for (var key in fields) {
     if (!fields.hasOwnProperty(key)) continue;
     var spec = specOf(key);
-    if (!spec.key || key === 'uid') continue;
+    if (!spec.key || key === 'uid' || key === 'caseId') continue;
 
     var c = ensureColumn(sheet, cols, key);
     if (c === -1) { skipped.push(key); continue; }
@@ -495,6 +592,7 @@ function handleUpdateRowStatus(ss, businessUnit, uid, fields) {
     success: true,
     sheetName: sheetName,
     rowIndex: targetRow,
+    caseId: caseId || String(data[targetRow - 2][col.caseId] || ''),
     uid: uid,
     writtenColumns: written,
     skippedFields: skipped
@@ -502,7 +600,46 @@ function handleUpdateRowStatus(ss, businessUnit, uid, fields) {
 }
 
 // ==============================================================================
-// 4. 檔案上傳（電子催告檔）
+// 4. 前端讀取全部案件（所有使用者共用同一份資料）
+// ==============================================================================
+
+function handleListCases(ss, businessUnits) {
+  var cases = [];
+  businessUnits.forEach(function (bu) {
+    var sheet = ss.getSheetByName(trackingSheetName(bu));
+    if (!sheet) return;
+    var cols = resolveColumns(sheet, bu);
+    var col = cols.col;
+    if (col.uid === -1) return;
+    var values = readTrackingRows(sheet, cols);
+    var specs = specsFor(bu);
+    values.forEach(function (r) {
+      var uid = String(r[col.uid] || '').trim();
+      if (!uid) return;
+      var obj = { businessUnit: bu };
+      specs.forEach(function (s) {
+        var c = col[s.key];
+        if (c === undefined || c === -1) return;
+        var v = r[c];
+        if (v instanceof Date) v = s.date ? normalizeDateValue(v) : Utilities.formatDate(v, 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss');
+        else if (s.date) v = normalizeDateValue(v);
+        obj[s.key] = v === null || v === undefined ? '' : v;
+      });
+      obj.uid = uid;
+      obj.caseId = String(obj.caseId || '').trim();
+      obj.isClosed = isClosedRow(r, col);
+      obj.statusTag = String(obj.statusTag || '').trim() === '待確認是否結案' ? 'PENDING_CONFIRMATION' : 'NORMAL';
+      var dm = String(obj.demandMethod || '').trim();
+      obj.demandMethod = dm === 'Email' || dm.toUpperCase() === 'EMAIL' ? 'EMAIL' : (dm === '存證信函' ? 'CERTIFIED_LETTER' : '');
+      if (obj.phone) obj.phone = normalizePhone(obj.phone);
+      cases.push(obj);
+    });
+  });
+  return { cases: cases, fetchedAt: nowString() };
+}
+
+// ==============================================================================
+// 5. 檔案上傳（電子催告檔）
 // ==============================================================================
 
 function handleUploadFile(ss, payload) {
@@ -521,6 +658,22 @@ function getUploadFolder(ss) {
   var parent = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
   var it = parent.getFoldersByName(UPLOAD_FOLDER_NAME);
   return it.hasNext() ? it.next() : parent.createFolder(UPLOAD_FOLDER_NAME);
+}
+
+// ==============================================================================
+// 手動補號：在 Apps Script 編輯器執行一次，為兩張追蹤表空白的「案件ID」補號
+// （平常不需要手動執行，任何一次回寫或前端讀取都會自動補號）
+// ==============================================================================
+
+function backfillCaseIds() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ['VALET', 'PEPPER'].forEach(function (bu) {
+    var sheet = ss.getSheetByName(trackingSheetName(bu));
+    if (!sheet) return;
+    var cols = resolveColumns(sheet, bu);
+    readTrackingRows(sheet, cols);
+    Logger.log(trackingSheetName(bu) + '：案件ID 已補齊');
+  });
 }
 
 // ==============================================================================

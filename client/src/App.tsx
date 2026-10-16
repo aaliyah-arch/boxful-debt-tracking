@@ -37,9 +37,24 @@ const MainLayout: React.FC = () => {
       standaloneStore.syncFromGoogleAppsScript(DEFAULT_GAS_URL)
         .then(() => queryClient.invalidateQueries({ queryKey: ['whitelist'] }))
         .catch((e) => console.log('[AutoSync] Interval sync skipped:', e.message));
+      // 案件資料：每 60 秒重新讀取 Google 試算表，看到其他同事的更新
+      queryClient.invalidateQueries({ queryKey: ['cases-list'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
     }, 60 * 1000);
 
-    return () => clearInterval(interval);
+    // 3. 切回這個分頁時立即重新讀取案件
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        queryClient.invalidateQueries({ queryKey: ['cases-list'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] });
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   if (isLoading) {

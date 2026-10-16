@@ -303,7 +303,11 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="text-xs font-medium text-ink-500 tabular-nums">
-                {caseData ? `${caseData.businessUnit === 'VALET' ? 'Valet' : 'Pepper'}  ${caseData.uid}` : ' '}
+                {caseData
+                  ? `${caseData.businessUnit === 'VALET' ? 'Valet' : 'Pepper'}  ${caseData.uid}${
+                      caseData.id && caseData.id !== caseData.uid ? `  ·  案件ID ${caseData.id}` : ''
+                    }`
+                  : ' '}
               </div>
               <h2 className="mt-0.5 text-xl font-bold tracking-tight text-ink-900 truncate">
                 {caseData?.name || '載入中'}
