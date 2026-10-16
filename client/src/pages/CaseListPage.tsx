@@ -15,6 +15,7 @@ import {
 import { format } from 'date-fns';
 import type { BusinessUnit } from '../types';
 import { casesApi } from '../api';
+import { getCasesSyncError } from '../api/standaloneStore';
 import { StatusBadge } from '../components/StatusBadge';
 import { CaseDetailDrawer } from '../components/CaseDetailDrawer';
 import { AgingBar } from '../components/AgingBar';
@@ -161,6 +162,11 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
               ? `${data.pagination.totalCount} 筆案件，欠款合計 $${(data.totalAmountSum || 0).toLocaleString()}`
               : '載入中'}
           </p>
+          {!isFetching && getCasesSyncError() && (
+            <p className="mt-1 text-[13px] text-amber-800">
+              無法讀取 Google 試算表，目前顯示的是這台電腦上次的資料：{getCasesSyncError()}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => refetch()} disabled={isFetching} className="btn btn-ghost" aria-label="重新整理">
