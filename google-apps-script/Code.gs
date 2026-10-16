@@ -17,7 +17,10 @@
  *    不會再寫到同 UID 的其他案件。案件ID空白的舊列會在下一次呼叫時自動補號。
  * 5. LIST_CASES：前端從試算表讀取全部案件，所有使用者看到的都是同一份資料。
  * 4. 前端上傳的電子催告檔會存到試算表所在資料夾下的「2bad-debtbackup 附件」資料夾，
- *    並把檔案連結回填到對應欄位。
+ *    並立即回填到該案件的「電子催告檔」欄位：儲存格顯示「Link」，點擊即開啟檔案。
+ *
+ * ※ 更新本腳本後，請先在編輯器執行一次 authorizeDrive() 完成雲端硬碟授權，
+ *    再到「部署 > 管理部署作業」以「新版本」重新部署，否則前端上傳會失敗。
  */
 
 var SHEET_NAMES = {
@@ -27,7 +30,7 @@ var SHEET_NAMES = {
   PEPPER_TRACKING: 'Pepper扣款失敗通知追蹤'
 };
 
-var SCRIPT_VERSION = '2026-10-16';
+var SCRIPT_VERSION = '2026-10-16b';
 var UPLOAD_FOLDER_NAME = '2bad-debtbackup 附件';
 
 /**
@@ -580,7 +583,11 @@ function handleUpdateRowStatus(ss, businessUnit, uid, fields, caseId) {
     }
     if (spec.text) val = asText(val);
 
-    sheet.getRange(targetRow, c + 1).setValue(val);
+    if (key === 'demandDocUrl') {
+      writeLinkCell(sheet.getRange(targetRow, c + 1), val);
+    } else {
+      sheet.getRange(targetRow, c + 1).setValue(val);
+    }
     written.push(cols.headers[c] + '(' + columnLetter(c + 1) + ')');
   }
 
@@ -613,7 +620,8 @@ function handleListCases(ss, businessUnits) {
     if (col.uid === -1) return;
     var values = readTrackingRows(sheet, cols);
     var specs = specsFor(bu);
-    values.forEach(function (r) {
+    var docLinks = readLinkColumn(sheet, col.demandDocUrl, values.length);
+    values.forEach(function (r, rowIdx) {
       var uid = String(r[col.uid] || '').trim();
       if (!uid) return;
       var obj = { businessUnit: bu };
@@ -625,6 +633,7 @@ function handleListCases(ss, businessUnits) {
         else if (s.date) v = normalizeDateValue(v);
         obj[s.key] = v === null || v === undefined ? '' : v;
       });
+      if (docLinks) obj.demandDocUrl = docLinks[rowIdx] || String(obj.demandDocUrl || '').trim();
       obj.uid = uid;
       obj.caseId = String(obj.caseId || '').trim();
       obj.isClosed = isClosedRow(r, col);
@@ -648,16 +657,92 @@ function handleUploadFile(ss, payload) {
   var name = [payload.businessUnit || '', payload.uid || '', payload.kind || '', payload.fileName || 'file']
     .filter(function (s) { return s; }).join('_');
   var blob = Utilities.newBlob(bytes, payload.mimeType || 'application/octet-stream', name);
-  var file = getUploadFolder(ss).createFile(blob);
-  return { url: file.getUrl(), id: file.getId(), name: file.getName() };
+
+  var file;
+  try {
+    file = getUploadFolder(ss).createFile(blob);
+  } catch (err) {
+    throw new Error('無法存入 Google 雲端：' + err.message +
+      '。請在 Apps Script 編輯器執行一次 authorizeDrive() 完成授權，再以「新版本」重新部署');
+  }
+  // 讓有連結的同事都能開啟（網域政策不允許時沿用資料夾權限）
+  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
+
+  var url = file.getUrl();
+  var sheetResult = null;
+  // 帶了案件ID就直接回填「電子催告檔」欄位（顯示 Link）
+  if (payload.caseId && payload.businessUnit) {
+    try {
+      sheetResult = handleUpdateRowStatus(ss, String(payload.businessUnit).toUpperCase(), payload.uid,
+        { demandDocUrl: url }, payload.caseId);
+    } catch (e) {
+      sheetResult = { success: false, message: e.message };
+    }
+  }
+  return { url: url, id: file.getId(), name: file.getName(), sheet: sheetResult };
 }
 
-/** 試算表所在資料夾下的附件資料夾（檔案沿用該資料夾的共用權限） */
+/** 試算表所在資料夾下的附件資料夾；沒有權限在該資料夾建立時，改存到部署者的雲端硬碟根目錄 */
 function getUploadFolder(ss) {
-  var parents = DriveApp.getFileById(ss.getId()).getParents();
-  var parent = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
-  var it = parent.getFoldersByName(UPLOAD_FOLDER_NAME);
-  return it.hasNext() ? it.next() : parent.createFolder(UPLOAD_FOLDER_NAME);
+  var parent;
+  try {
+    var parents = DriveApp.getFileById(ss.getId()).getParents();
+    parent = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
+    var it = parent.getFoldersByName(UPLOAD_FOLDER_NAME);
+    return it.hasNext() ? it.next() : parent.createFolder(UPLOAD_FOLDER_NAME);
+  } catch (e) {
+    var root = DriveApp.getRootFolder();
+    var it2 = root.getFoldersByName(UPLOAD_FOLDER_NAME);
+    return it2.hasNext() ? it2.next() : root.createFolder(UPLOAD_FOLDER_NAME);
+  }
+}
+
+/** 寫入連結儲存格：顯示「Link」，點擊開啟網址；空值則清空 */
+function writeLinkCell(range, url) {
+  url = String(url == null ? '' : url).trim();
+  if (!url) { range.clearContent(); return; }
+  if (!/^https?:\/\//i.test(url)) { range.setValue(url); return; }
+  var rich = SpreadsheetApp.newRichTextValue().setText('Link').setLinkUrl(url).build();
+  range.setRichTextValue(rich);
+}
+
+/**
+ * 讀取連結欄位的實際網址（儲存格顯示「Link」時，網址在超連結裡）
+ * 支援：超連結文字、=HYPERLINK("網址","Link") 公式、直接貼上的網址
+ */
+function readLinkColumn(sheet, c, rowCount) {
+  if (c === undefined || c === -1 || rowCount === 0) return null;
+  var range = sheet.getRange(2, c + 1, rowCount, 1);
+  var rich = range.getRichTextValues();
+  var formulas = range.getFormulas();
+  var out = [];
+  for (var i = 0; i < rowCount; i++) {
+    var url = '';
+    var rt = rich[i][0];
+    if (rt) {
+      url = rt.getLinkUrl() || '';
+      if (!url) {
+        var runs = rt.getRuns();
+        for (var k = 0; k < runs.length && !url; k++) url = runs[k].getLinkUrl() || '';
+      }
+      if (!url) url = rt.getText();
+    }
+    var f = formulas[i][0];
+    if (f) {
+      var m = f.match(/HYPERLINK\(\s*"([^"]+)"/i);
+      if (m) url = m[1];
+    }
+    out.push(String(url || '').trim());
+  }
+  return out;
+}
+
+/**
+ * 在 Apps Script 編輯器手動執行一次，完成雲端硬碟授權（上傳電子催告檔需要）
+ */
+function authorizeDrive() {
+  var folder = getUploadFolder(SpreadsheetApp.getActiveSpreadsheet());
+  Logger.log('雲端硬碟授權完成，附件資料夾：' + folder.getName() + ' ' + folder.getUrl());
 }
 
 // ==============================================================================

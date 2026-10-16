@@ -28,6 +28,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   const [isSavingFA, setIsSavingFA] = useState(false);
   const [isSavingClose, setIsSavingClose] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [successDialog, setSuccessDialog] = useState<string | null>(null);
 
   // Form states - 2C
   const [lineNoticeDate, setLineNoticeDate] = useState('');
@@ -60,6 +61,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   const loadCase = async (id: string) => {
     setIsLoading(true);
     setFeedbackMsg(null);
+    setSuccessDialog(null);
     try {
       const data = await casesApi.getById(id);
       setCaseData(data);
@@ -106,11 +108,13 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   useEffect(() => {
     if (!caseId) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      if (successDialog) setSuccessDialog(null);
+      else onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [caseId, onClose]);
+  }, [caseId, onClose, successDialog]);
 
   if (!caseId) return null;
 
@@ -128,7 +132,8 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
         twoCNotes: twoCNotes || null,
       });
       setCaseData(res.case);
-      setFeedbackMsg({ type: 'success', text: '2C 催帳紀錄已儲存' });
+      setFeedbackMsg({ type: 'success', text: 'CS 勸導紀錄已儲存，並同步回 Google 試算表' });
+      setSuccessDialog('CS 勸導紀錄已同步回 Google 試算表');
       if (onCaseUpdated) onCaseUpdated(res.case);
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err.response?.data?.error || err.message || '更新失敗' });
@@ -157,7 +162,8 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
         faNotes: faNotes || null,
       });
       setCaseData(res.case);
-      setFeedbackMsg({ type: 'success', text: '催告與終止紀錄已儲存' });
+      setFeedbackMsg({ type: 'success', text: '催告與終止紀錄已儲存，並同步回 Google 試算表' });
+      setSuccessDialog('FA 催告與終止紀錄已同步回 Google 試算表');
       if (onCaseUpdated) onCaseUpdated(res.case);
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err.response?.data?.error || err.message || '更新失敗' });
@@ -200,13 +206,26 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
     setUploadingKind(kind);
     setFeedbackMsg(null);
     try {
-      const url = await uploadFileToGas(file, {
+      const { url, sheetUpdated, sheetError } = await uploadFileToGas(file, {
         businessUnit: caseData.businessUnit,
         uid: caseData.uid,
+        caseId: caseData.id,
         kind: '電子催告檔',
       });
       setUrl(url);
-      setFeedbackMsg({ type: 'success', text: `「${file.name}」已上傳至 Google 雲端，請按「儲存 FA 紀錄」同步回試算表` });
+      if (sheetUpdated) {
+        const updated = { ...caseData, demandDocUrl: url };
+        setCaseData(updated);
+        if (onCaseUpdated) onCaseUpdated(updated);
+        setFeedbackMsg({ type: 'success', text: `「${file.name}」已上傳，試算表「電子催告檔」已填入 Link` });
+      } else {
+        setFeedbackMsg({
+          type: sheetError ? 'error' : 'success',
+          text: sheetError
+            ? `「${file.name}」已上傳至 Google 雲端，但回填試算表失敗（${sheetError}），請按「儲存 FA 紀錄」再試一次`
+            : `「${file.name}」已上傳至 Google 雲端，請按「儲存 FA 紀錄」同步回試算表`,
+        });
+      }
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err.message || '檔案上傳失敗' });
     } finally {
@@ -436,9 +455,9 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                 </dl>
               </section>
 
-              {/* 2C 勸導 */}
+              {/* CS 勸導 */}
               <form onSubmit={handleSave2C} className="px-6 sm:px-8 py-7">
-                {sectionHead('2C 勸導', '先用 Line 通知，聯絡不到再依序改用 Email、簡訊、電話。', is2CTeam)}
+                {sectionHead('CS 勸導', '先用 Line 通知，聯絡不到再依序改用 Email、簡訊、電話。', is2CTeam)}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {dateField('Line 通知', lineNoticeDate, setLineNoticeDate, is2CTeam)}
                   {dateField('Email 通知', emailNoticeDate, setEmailNoticeDate, is2CTeam)}
@@ -460,7 +479,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                   <div className="mt-5 flex justify-end">
                     <button type="submit" disabled={isSaving2C} className="btn btn-primary">
                       {isSaving2C && <Loader2 className="w-4 h-4 animate-spin" />}
-                      儲存 2C 紀錄
+                      儲存 CS 紀錄
                     </button>
                   </div>
                 )}
@@ -588,6 +607,33 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
           )}
         </div>
       </div>
+
+      {successDialog && (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center p-4 bg-ink-950/40 animate-fade-in"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="save-success-title"
+          onClick={() => setSuccessDialog(null)}
+        >
+          <div
+            className="w-full max-w-xs bg-white rounded-xl shadow-2xl px-6 py-6 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CheckCircle2 className="w-10 h-10 mx-auto text-brand-600" />
+            <h3 id="save-success-title" className="mt-3 text-lg font-bold text-ink-900">更新成功</h3>
+            <p className="mt-1 text-[13px] text-ink-500">{successDialog}</p>
+            <button
+              type="button"
+              autoFocus
+              onClick={() => setSuccessDialog(null)}
+              className="btn btn-primary mt-5 w-full justify-center"
+            >
+              確定
+            </button>
+          </div>
+        </div>
+      )}
     </div>,
     document.body
   );
