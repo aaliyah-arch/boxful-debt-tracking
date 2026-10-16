@@ -1,5 +1,6 @@
 import type { BusinessUnit, CaseRecord, DashboardOverview, Role, WhitelistItem, User } from '../types';
 import { parseSpreadsheetFile, generateSampleExcelBlob, computeStage } from '../utils/reportParser';
+import { normalizeDateString, parseDateLoose, isNonDateText } from '../utils/dateUtils';
 
 const WHITELIST_STORAGE_KEY = 'boxful_whitelist_data';
 const CASES_STORAGE_KEY = 'boxful_cases_data';
@@ -105,7 +106,8 @@ const num = (v: any): number => {
 function sheetRowToCase(r: any): CaseRecord {
   const isClosed = r.isClosed === true;
   const outstandingDays = num(r.outstandingDays);
-  const terminationNoticeDate = strOrNull(r.terminationNoticeDate);
+  const terminationNoticeDate = normalizeDateString(r.terminationNoticeDate);
+  const termDate = parseDateLoose(terminationNoticeDate);
   const updatedAt = str(r.updatedAt);
   return {
     id: str(r.caseId) || `${r.businessUnit}-${str(r.uid)}`,
@@ -116,33 +118,33 @@ function sheetRowToCase(r: any): CaseRecord {
     businessUnit: r.businessUnit as BusinessUnit,
     outstandingAmount: num(r.amount),
     outstandingDays,
-    billDate: strOrNull(r.billDate),
+    billDate: normalizeDateString(r.billDate),
     address: strOrNull(r.address),
     serviceType: strOrNull(r.serviceType),
     statusTag: r.statusTag === 'PENDING_CONFIRMATION' ? 'PENDING_CONFIRMATION' : 'NORMAL',
     // 階段一律依逾期天數與終止日重新計算，避免試算表手動輸入的文字造成誤判
-    stage: computeStage({ isClosed, outstandingDays, terminationNoticeDate }),
+    stage: computeStage({ isClosed, outstandingDays, terminationNoticeDate: termDate }),
     isClosed,
-    closedDate: strOrNull(r.closedDate),
-    collectionStartDate: strOrNull(r.collectionStartDate),
-    lineNoticeDate: strOrNull(r.lineNoticeDate),
-    emailNoticeDate: strOrNull(r.emailNoticeDate),
-    smsNoticeDate: strOrNull(r.smsNoticeDate),
-    phoneNoticeDate: strOrNull(r.phoneNoticeDate),
+    closedDate: normalizeDateString(r.closedDate),
+    collectionStartDate: normalizeDateString(r.collectionStartDate),
+    lineNoticeDate: normalizeDateString(r.lineNoticeDate),
+    emailNoticeDate: normalizeDateString(r.emailNoticeDate),
+    smsNoticeDate: normalizeDateString(r.smsNoticeDate),
+    phoneNoticeDate: normalizeDateString(r.phoneNoticeDate),
     twoCNotes: strOrNull(r.twoCNotes),
     demandMethod: r.demandMethod === 'EMAIL' || r.demandMethod === 'CERTIFIED_LETTER' ? r.demandMethod : null,
-    demandSmsDate: strOrNull(r.demandSmsDate),
+    demandSmsDate: normalizeDateString(r.demandSmsDate),
     demandDocUrl: strOrNull(r.demandDocUrl),
-    demandNoticeDate: strOrNull(r.demandNoticeDate),
-    demandDueDate: strOrNull(r.demandDueDate),
-    terminationSmsDate: strOrNull(r.terminationSmsDate),
+    demandNoticeDate: normalizeDateString(r.demandNoticeDate),
+    demandDueDate: normalizeDateString(r.demandDueDate),
+    terminationSmsDate: normalizeDateString(r.terminationSmsDate),
     terminationNoticeDate,
-    terminationDueDate: strOrNull(r.terminationDueDate),
-    certifiedLetterSentDate: strOrNull(r.certifiedLetterSentDate),
-    certifiedLetterReceivedDate: strOrNull(r.certifiedLetterReceivedDate),
+    terminationDueDate: normalizeDateString(r.terminationDueDate),
+    certifiedLetterSentDate: normalizeDateString(r.certifiedLetterSentDate),
+    certifiedLetterReceivedDate: normalizeDateString(r.certifiedLetterReceivedDate),
     faNotes: strOrNull(r.faNotes),
     lastImportedAt: updatedAt,
-    createdAt: strOrNull(r.collectionStartDate) || updatedAt,
+    createdAt: normalizeDateString(r.collectionStartDate) || updatedAt,
     updatedAt,
   };
 }
@@ -291,6 +293,13 @@ const DEFAULT_WHITELIST: WhitelistItem[] = [
     updatedAt: new Date().toISOString(),
   },
 ];
+
+/** 總覽表的帳單月份分組（與 getDashboardOverview 相同規則） */
+export function matchesMonthBucket(c: CaseRecord, bucket: string): boolean {
+  if (!bucket || bucket === 'total') return true;
+  if (bucket === 'older') return (c.billDate || '') < '2026-07-01';
+  return (c.billDate || '').startsWith(bucket.replace('/', '-'));
+}
 
 export const standaloneStore = {
   // Whitelist operations
@@ -569,7 +578,14 @@ export const standaloneStore = {
     const cases = standaloneStore.getCases();
     const index = cases.findIndex((c) => c.id === id);
     if (index < 0) throw new Error('找不到該案件，請重新整理頁面');
-    await writeCaseToSheet(cases[index], data);
+    // 試算表原本是文字（例如「10/3 已寄」）的日期欄，表單上會顯示空白；
+    // 使用者沒有填新日期時不要回寫，避免把原本的文字清掉
+    const fields: Record<string, any> = { ...data };
+    Object.keys(fields).forEach((k) => {
+      const before = (cases[index] as any)[k];
+      if ((fields[k] === null || fields[k] === '') && isNonDateText(before)) delete fields[k];
+    });
+    await writeCaseToSheet(cases[index], fields);
     const fresh = await loadCasesFromSheet(true);
     const updated = fresh.find((c) => c.id === id);
     if (updated) return updated;
@@ -651,10 +667,7 @@ export const standaloneStore = {
 
       timeBuckets.forEach((tb) => {
         if (tb.isTotal) return;
-        const bCases = stageCases.filter((c) => {
-          if (tb.key === 'older') return (c.billDate || '') < '2026-07-01';
-          return (c.billDate || '').startsWith(tb.key.replace('/', '-'));
-        });
+        const bCases = stageCases.filter((c) => matchesMonthBucket(c, tb.key));
         const amt = bCases.reduce((sum, c) => sum + c.outstandingAmount, 0);
         buckets[tb.key] = {
           amount: amt,
@@ -682,10 +695,7 @@ export const standaloneStore = {
     };
     timeBuckets.forEach((tb) => {
       if (tb.isTotal) return;
-      const bCases = allCases.filter((c) => {
-        if (tb.key === 'older') return (c.billDate || '') < '2026-07-01';
-        return (c.billDate || '').startsWith(tb.key.replace('/', '-'));
-      });
+      const bCases = allCases.filter((c) => matchesMonthBucket(c, tb.key));
       const amt = bCases.reduce((sum, c) => sum + c.outstandingAmount, 0);
       totalsBuckets[tb.key] = {
         amount: amt,

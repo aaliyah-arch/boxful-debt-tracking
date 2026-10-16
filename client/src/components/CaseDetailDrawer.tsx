@@ -8,6 +8,7 @@ import { casesApi } from '../api';
 import { uploadFileToGas } from '../api/standaloneStore';
 import { StatusBadge } from './StatusBadge';
 import { AgingBar } from './AgingBar';
+import { safeFormat } from '../utils/dateUtils';
 
 interface CaseDetailDrawerProps {
   caseId: string | null;
@@ -54,7 +55,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   const [closedDate, setClosedDate] = useState('');
   const todayStr = () => format(new Date(), 'yyyy-MM-dd');
 
-  const formatDateInput = (d?: string | null) => (d ? format(new Date(d), 'yyyy-MM-dd') : '');
+  const formatDateInput = (d?: string | null) => safeFormat(d, 'yyyy-MM-dd', '');
 
   const loadCase = async (id: string) => {
     setIsLoading(true);
@@ -275,7 +276,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
     </div>
   );
 
-  const fmt = (d?: string | null, f = 'yyyy-MM-dd') => (d ? format(new Date(d), f) : '');
+  const fmt = (d?: string | null, f = 'yyyy-MM-dd') => safeFormat(d, f);
 
   const infoItems: Array<{ label: string; value: string; wide?: boolean }> = caseData
     ? [

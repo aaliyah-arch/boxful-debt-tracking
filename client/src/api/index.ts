@@ -1,6 +1,6 @@
 import api from './client';
 import type { BusinessUnit, DashboardOverview, CaseRecord, WhitelistItem, User, Role } from '../types';
-import { standaloneStore, loadCasesFromSheet } from './standaloneStore';
+import { standaloneStore, loadCasesFromSheet, matchesMonthBucket } from './standaloneStore';
 
 export const authApi = {
   loginWithGoogle: async (payload: string | { credential?: string; email?: string; name?: string; avatarUrl?: string }) => {
@@ -92,26 +92,51 @@ export const casesApi = {
       let items = allCases;
       if (params.businessUnit) items = items.filter((c) => c.businessUnit === params.businessUnit);
       if (params.stage) items = items.filter((c) => c.stage === params.stage);
+      if (params.monthBucket) items = items.filter((c) => matchesMonthBucket(c, params.monthBucket!));
       if (params.statusTag) items = items.filter((c) => c.statusTag === params.statusTag);
+      if (params.minDays !== undefined) items = items.filter((c) => c.outstandingDays >= params.minDays!);
+      if (params.maxDays !== undefined) items = items.filter((c) => c.outstandingDays <= params.maxDays!);
+      if (params.contactStatus) {
+        const cs = params.contactStatus;
+        items = items.filter((c) => {
+          if (cs === 'line_contacted') return !!c.lineNoticeDate;
+          if (cs === 'email_contacted') return !!c.emailNoticeDate;
+          if (cs === 'phone_contacted') return !!c.phoneNoticeDate;
+          if (cs === 'uncontacted') return !c.lineNoticeDate && !c.emailNoticeDate && !c.phoneNoticeDate && !c.smsNoticeDate;
+          return true;
+        });
+      }
       if (params.search) {
         const s = params.search.toLowerCase();
         items = items.filter(
           (c) => c.name.toLowerCase().includes(s) || c.uid.toLowerCase().includes(s) || c.id.toLowerCase().includes(s)
         );
       }
+
+      // 排序
+      const sortBy = (params.sortBy || 'outstandingDays') as keyof CaseRecord;
+      const dir = params.sortOrder === 'asc' ? 1 : -1;
+      items = [...items].sort((a, b) => {
+        const av = a[sortBy] as any;
+        const bv = b[sortBy] as any;
+        if (typeof av === 'number' || typeof bv === 'number') return ((Number(av) || 0) - (Number(bv) || 0)) * dir;
+        return String(av ?? '').localeCompare(String(bv ?? ''), 'zh-Hant') * dir;
+      });
+
       const totalAmountSum = items.reduce((sum, c) => sum + c.outstandingAmount, 0);
       const pendingConfirmationCount = allCases.filter(
         (c) => (!params.businessUnit || c.businessUnit === params.businessUnit) && !c.isClosed && c.statusTag === 'PENDING_CONFIRMATION'
       ).length;
 
+      // 分頁：一次只顯示一頁，避免案件多時畫面卡住
+      const pageSize = params.pageSize || 20;
+      const totalCount = items.length;
+      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      const page = Math.min(Math.max(1, params.page || 1), totalPages);
+
       return {
-        items,
-        pagination: {
-          page: 1,
-          pageSize: 50,
-          totalCount: items.length,
-          totalPages: 1,
-        },
+        items: items.slice((page - 1) * pageSize, page * pageSize),
+        pagination: { page, pageSize, totalCount, totalPages },
         totalAmountSum,
         pendingConfirmationCount,
       };
