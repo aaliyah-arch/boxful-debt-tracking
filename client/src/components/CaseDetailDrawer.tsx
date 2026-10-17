@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ExternalLink, CheckCircle2, AlertTriangle, Loader2, Upload } from 'lucide-react';
+import { X, ExternalLink, CheckCircle2, AlertTriangle, Loader2, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import type { CaseRecord, DemandMethod } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { casesApi } from '../api';
-import { uploadFileToGas } from '../api/standaloneStore';
 import { StatusBadge } from './StatusBadge';
 import { AgingBar } from './AgingBar';
 import { safeFormat } from '../utils/dateUtils';
@@ -28,7 +27,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   const [isSavingFA, setIsSavingFA] = useState(false);
   const [isSavingClose, setIsSavingClose] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [successDialog, setSuccessDialog] = useState<string | null>(null);
+  const [resultDialog, setResultDialog] = useState<{ ok: boolean; text: string } | null>(null);
 
   // Form states - 2C
   const [lineNoticeDate, setLineNoticeDate] = useState('');
@@ -49,7 +48,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   const [certifiedLetterSentDate, setCertifiedLetterSentDate] = useState('');
   const [certifiedLetterReceivedDate, setCertifiedLetterReceivedDate] = useState('');
   const [faNotes, setFaNotes] = useState('');
-  const [uploadingKind, setUploadingKind] = useState<string | null>(null);
+  const [isSavingDoc, setIsSavingDoc] = useState(false);
 
   // Form states - Close
   const [isClosed, setIsClosed] = useState(false);
@@ -61,7 +60,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   const loadCase = async (id: string) => {
     setIsLoading(true);
     setFeedbackMsg(null);
-    setSuccessDialog(null);
+    setResultDialog(null);
     try {
       const data = await casesApi.getById(id);
       setCaseData(data);
@@ -109,14 +108,20 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
     if (!caseId) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (successDialog) setSuccessDialog(null);
+      if (resultDialog) setResultDialog(null);
       else onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [caseId, onClose, successDialog]);
+  }, [caseId, onClose, resultDialog]);
 
   if (!caseId) return null;
+
+  const errText = (err: any, fallback: string) => err?.response?.data?.error || err?.message || fallback;
+  const showFail = (text: string) => {
+    setFeedbackMsg({ type: 'error', text });
+    setResultDialog({ ok: false, text });
+  };
 
   const handleSave2C = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,10 +138,10 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
       });
       setCaseData(res.case);
       setFeedbackMsg({ type: 'success', text: 'CS 勸導紀錄已儲存，並同步回 Google 試算表' });
-      setSuccessDialog('CS 勸導紀錄已同步回 Google 試算表');
+      setResultDialog({ ok: true, text: 'CS 勸導紀錄已同步回 Google 試算表' });
       if (onCaseUpdated) onCaseUpdated(res.case);
     } catch (err: any) {
-      setFeedbackMsg({ type: 'error', text: err.response?.data?.error || err.message || '更新失敗' });
+      showFail(errText(err, '更新失敗'));
     } finally {
       setIsSaving2C(false);
     }
@@ -163,10 +168,10 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
       });
       setCaseData(res.case);
       setFeedbackMsg({ type: 'success', text: '催告與終止紀錄已儲存，並同步回 Google 試算表' });
-      setSuccessDialog('FA 催告與終止紀錄已同步回 Google 試算表');
+      setResultDialog({ ok: true, text: 'FA 催告與終止紀錄已同步回 Google 試算表' });
       if (onCaseUpdated) onCaseUpdated(res.case);
     } catch (err: any) {
-      setFeedbackMsg({ type: 'error', text: err.response?.data?.error || err.message || '更新失敗' });
+      showFail(errText(err, '更新失敗'));
     } finally {
       setIsSavingFA(false);
     }
@@ -189,79 +194,65 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
       setClosedDate(effectiveClosedDate || '');
       setCaseData(res.case);
       setFeedbackMsg({ type: 'success', text: isClosed ? '案件已標記為已結案' : '案件已重新開啟' });
+      setResultDialog({ ok: true, text: isClosed ? '案件已標記為已結案，並同步回 Google 試算表' : '案件已重新開啟，並同步回 Google 試算表' });
       if (onCaseUpdated) onCaseUpdated(res.case);
     } catch (err: any) {
-      setFeedbackMsg({ type: 'error', text: err.response?.data?.error || err.message || '結案操作失敗' });
+      showFail(errText(err, '結案操作失敗'));
     } finally {
       setIsSavingClose(false);
     }
   };
 
-  const handleUpload = async (
-    kind: 'DEMAND_DOC',
-    file: File | undefined,
-    setUrl: (url: string) => void
-  ) => {
-    if (!file || !caseData) return;
-    setUploadingKind(kind);
+  /** 只儲存「電子催告檔」連結，成功寫回試算表後跳出「儲存成功」 */
+  const handleSaveDocUrl = async () => {
+    if (!caseData) return;
+    const url = demandDocUrl.trim();
+    if (url && !/^https?:\/\//i.test(url)) {
+      showFail('請貼上完整的網址（以 https:// 開頭）');
+      return;
+    }
+    setIsSavingDoc(true);
     setFeedbackMsg(null);
     try {
-      const { url, sheetUpdated, sheetError } = await uploadFileToGas(file, {
-        businessUnit: caseData.businessUnit,
-        uid: caseData.uid,
-        caseId: caseData.id,
-        kind: '電子催告檔',
-      });
-      setUrl(url);
-      if (sheetUpdated) {
-        const updated = { ...caseData, demandDocUrl: url };
-        setCaseData(updated);
-        if (onCaseUpdated) onCaseUpdated(updated);
-        setFeedbackMsg({ type: 'success', text: `「${file.name}」已上傳，試算表「電子催告檔」已填入 Link` });
-      } else {
-        setFeedbackMsg({
-          type: sheetError ? 'error' : 'success',
-          text: sheetError
-            ? `「${file.name}」已上傳至 Google 雲端，但回填試算表失敗（${sheetError}），請按「儲存 FA 紀錄」再試一次`
-            : `「${file.name}」已上傳至 Google 雲端，請按「儲存 FA 紀錄」同步回試算表`,
-        });
-      }
+      const res = await casesApi.updateFA(caseData.id, { demandDocUrl: url || null });
+      setCaseData(res.case);
+      setDemandDocUrl(res.case.demandDocUrl || url);
+      setFeedbackMsg({ type: 'success', text: '電子催告檔連結已儲存，試算表顯示為「Link」' });
+      setResultDialog({ ok: true, text: '電子催告檔連結已寫入 Google 試算表，儲存格顯示為「Link」' });
+      if (onCaseUpdated) onCaseUpdated(res.case);
     } catch (err: any) {
-      setFeedbackMsg({ type: 'error', text: err.message || '檔案上傳失敗' });
+      showFail(errText(err, '儲存電子催告檔連結失敗'));
     } finally {
-      setUploadingKind(null);
+      setIsSavingDoc(false);
     }
   };
 
-  const renderFileField = (kind: 'DEMAND_DOC', label: string, url: string, setUrl: (url: string) => void) => (
+  const renderDocUrlField = () => (
     <div className="sm:col-span-2">
-      <label className="field-label">{label}</label>
+      <label className="field-label">電子催告檔</label>
       <div className="flex flex-wrap gap-2">
         <input
           type="url"
           disabled={!isFATeam}
-          placeholder="上傳檔案，或貼上 Google 雲端連結"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          placeholder="貼上 Google 雲端檔案連結"
+          value={demandDocUrl}
+          onChange={(e) => setDemandDocUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleSaveDocUrl();
+            }
+          }}
           className="field flex-1 !w-auto min-w-0"
         />
         {isFATeam && (
-          <label className={`btn btn-secondary ${uploadingKind ? 'opacity-50 pointer-events-none' : ''}`}>
-            {uploadingKind === kind ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            {uploadingKind === kind ? '上傳中' : '上傳檔案'}
-            <input
-              type="file"
-              className="hidden"
-              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-              onChange={(e) => {
-                handleUpload(kind, e.target.files?.[0], setUrl);
-                e.target.value = '';
-              }}
-            />
-          </label>
+          <button type="button" onClick={handleSaveDocUrl} disabled={isSavingDoc} className="btn btn-secondary">
+            {isSavingDoc && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isSavingDoc ? '儲存中' : '儲存'}
+          </button>
         )}
-        {url && (
-          <a href={url} target="_blank" rel="noreferrer" className="btn btn-ghost">
+        {demandDocUrl && (
+          <a href={demandDocUrl} target="_blank" rel="noreferrer" className="btn btn-ghost">
             <ExternalLink className="w-4 h-4" />
             開啟
           </a>
@@ -428,9 +419,10 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                           setIsClosed(true);
                           setClosedDate(today);
                           setFeedbackMsg({ type: 'success', text: '已結案，並同步回 Google 試算表。' });
+                          setResultDialog({ ok: true, text: '已結案，並同步回 Google 試算表' });
                           if (onCaseUpdated) onCaseUpdated(res.case);
                         } catch (err: any) {
-                          setFeedbackMsg({ type: 'error', text: err.message || '結案失敗' });
+                          showFail(errText(err, '結案失敗'));
                         } finally {
                           setIsSavingClose(false);
                         }
@@ -509,7 +501,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       {dateField('催告簡訊日期', demandSmsDate, setDemandSmsDate, isFATeam)}
                       {dateField('催告日期', demandNoticeDate, setDemandNoticeDate, isFATeam)}
                       {dateField('催告到期日', demandDueDate, setDemandDueDate, isFATeam)}
-                      {renderFileField('DEMAND_DOC', '電子催告檔', demandDocUrl, setDemandDocUrl)}
+                      {renderDocUrlField()}
                     </div>
                   </div>
 
@@ -608,26 +600,32 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
         </div>
       </div>
 
-      {successDialog && (
+      {resultDialog && (
         <div
           className="absolute inset-0 z-10 flex items-center justify-center p-4 bg-ink-950/40 animate-fade-in"
           role="alertdialog"
           aria-modal="true"
-          aria-labelledby="save-success-title"
-          onClick={() => setSuccessDialog(null)}
+          aria-labelledby="save-result-title"
+          onClick={() => setResultDialog(null)}
         >
           <div
             className="w-full max-w-xs bg-white rounded-xl shadow-2xl px-6 py-6 text-center"
             onClick={(e) => e.stopPropagation()}
           >
-            <CheckCircle2 className="w-10 h-10 mx-auto text-brand-600" />
-            <h3 id="save-success-title" className="mt-3 text-lg font-bold text-ink-900">更新成功</h3>
-            <p className="mt-1 text-[13px] text-ink-500">{successDialog}</p>
+            {resultDialog.ok ? (
+              <CheckCircle2 className="w-10 h-10 mx-auto text-brand-600" />
+            ) : (
+              <XCircle className="w-10 h-10 mx-auto text-red-600" />
+            )}
+            <h3 id="save-result-title" className="mt-3 text-lg font-bold text-ink-900">
+              {resultDialog.ok ? '儲存成功' : '儲存失敗'}
+            </h3>
+            <p className="mt-1 text-[13px] text-ink-500 break-words">{resultDialog.text}</p>
             <button
               type="button"
               autoFocus
-              onClick={() => setSuccessDialog(null)}
-              className="btn btn-primary mt-5 w-full justify-center"
+              onClick={() => setResultDialog(null)}
+              className={`btn mt-5 w-full justify-center ${resultDialog.ok ? 'btn-primary' : 'bg-red-600 text-white hover:bg-red-700'}`}
             >
               確定
             </button>

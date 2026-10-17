@@ -199,6 +199,11 @@ async function writeCaseToSheet(c: CaseRecord, fields: Record<string, any>) {
   if (result && result.success === false) {
     throw new Error(result.message || '回寫 Google 試算表失敗');
   }
+  // 有要寫的欄位卻一欄都沒寫進去，視為失敗（例如試算表找不到對應欄位）
+  const wanted = Object.keys(fields).filter((k) => fields[k] !== undefined);
+  if (wanted.length > 0 && Array.isArray(result?.writtenColumns) && result.writtenColumns.length === 0) {
+    throw new Error(`試算表找不到要寫入的欄位：${(result.skippedFields || wanted).join('、')}`);
+  }
 }
 
 /** 原始報表列整理：日期轉 yyyy-MM-dd、補齊欄數、去除整列空白 */
