@@ -30,7 +30,7 @@ var SHEET_NAMES = {
   PEPPER_TRACKING: 'Pepper扣款失敗通知追蹤'
 };
 
-var SCRIPT_VERSION = '2026-10-16b';
+var SCRIPT_VERSION = '2026-10-17';
 var UPLOAD_FOLDER_NAME = '2bad-debtbackup 附件';
 
 /**
@@ -308,23 +308,33 @@ function assignCaseIds(sheet, cols, values) {
   if (c === -1 || values.length === 0) return false;
   values.forEach(function (r) { while (r.length <= c) r.push(''); });
 
+  // 有效的案件ID：文字、且以「UID-」開頭。
+  // 試算表會把「2297-01」自動轉成日期，這類儲存格視為無效，重新編號並以純文字寫回。
+  var isValid = function (r) {
+    var v = r[c];
+    var uid = String(r[col.uid] || '').trim();
+    return typeof v === 'string' && uid !== '' && v.trim().indexOf(uid + '-') === 0;
+  };
+
   var maxSeq = {};
   values.forEach(function (r) {
-    var id = String(r[c] || '').trim();
-    var m = id.match(/^(.*)-(\d+)$/);
+    if (!isValid(r)) return;
+    var m = String(r[c]).trim().match(/^(.*)-(\d+)$/);
     if (m) maxSeq[m[1]] = Math.max(maxSeq[m[1]] || 0, Number(m[2]));
   });
 
   var changed = false;
   values.forEach(function (r) {
     var uid = String(r[col.uid] || '').trim();
-    if (!uid || String(r[c] || '').trim() !== '') return;
+    if (!uid || isValid(r)) return;
     r[c] = nextCaseId(maxSeq, uid);
     changed = true;
   });
 
   if (changed) {
-    sheet.getRange(2, c + 1, values.length, 1).setValues(values.map(function (r) { return [r[c]]; }));
+    var range = sheet.getRange(2, c + 1, values.length, 1);
+    range.setNumberFormat('@'); // 純文字格式，避免再被轉成日期
+    range.setValues(values.map(function (r) { return [String(r[c] == null ? '' : r[c])]; }));
   }
   return changed;
 }
@@ -467,7 +477,7 @@ function handleSyncSummaryTracking(ss, businessUnit, items, markMissingAsPending
         if (c === undefined || c === -1) return;
         newRow[c] = val;
       };
-      put('caseId', nextCaseId(maxSeq, uid));
+      put('caseId', asText(nextCaseId(maxSeq, uid)));
       put('uid', uid);
       put('name', item.name || '');
       put('outstandingDays', item.outstandingDays);
@@ -545,11 +555,10 @@ function handleUpdateRowStatus(ss, businessUnit, uid, fields, caseId) {
     for (var k = 0; k < data.length; k++) {
       if (String(data[k][col.caseId]).trim() === String(caseId).trim()) { targetRow = k + 2; break; }
     }
-    if (targetRow === -1) {
-      throw new Error('在工作表「' + sheetName + '」找不到案件ID ' + caseId + '，請重新整理頁面後再試');
-    }
-  } else {
-    // 相容舊版前端：只有 UID 時，優先寫入未結案的列
+  }
+  // 沒有案件ID，或前端還拿著舊的、被轉成日期的案件ID 時，改依 UID 找未結案的列
+  var staleId = caseId && String(caseId).trim().indexOf(String(uid).trim() + '-') !== 0;
+  if (targetRow === -1 && uid && (!caseId || staleId)) {
     for (var i = data.length - 1; i >= 0; i--) {
       if (String(data[i][col.uid]).trim() !== String(uid).trim()) continue;
       if (!isClosedRow(data[i], col)) { targetRow = i + 2; break; }
@@ -557,7 +566,7 @@ function handleUpdateRowStatus(ss, businessUnit, uid, fields, caseId) {
     }
   }
   if (targetRow === -1) {
-    return { success: false, message: '在工作表中找不到 UID ' + uid + ' 的對應列' };
+    throw new Error('在工作表「' + sheetName + '」找不到案件' + (caseId ? 'ID ' + caseId : ' UID ' + uid) + '，請重新整理頁面後再試');
   }
 
   var written = [], skipped = [];
