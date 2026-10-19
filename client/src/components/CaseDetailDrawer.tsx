@@ -150,7 +150,12 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
     setIsSavingFA(true);
     setFeedbackMsg(null);
     try {
-      const res = await casesApi.updateFA(caseData.id, {
+      // 只有 2C 權限（非 FA）時，只回寫 CS 負責的兩個簡訊日期，不動 FA 欄位
+      const csOnly = {
+        demandSmsDate: demandSmsDate || null,
+        terminationSmsDate: terminationSmsDate || null,
+      };
+      const res = await casesApi.updateFA(caseData.id, !isFATeam ? csOnly : {
         demandNoticeDate: demandNoticeDate || null,
         demandDueDate: demandDueDate || null,
         demandDocUrl: demandDocUrl || null,
@@ -477,7 +482,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
 
               {/* 催告與終止 */}
               <form onSubmit={handleSaveFA} className="px-6 sm:px-8 py-7">
-                {sectionHead('催告與終止', '滿 50 天發催告，滿 80 天發終止函；終止函寄出 15 天仍未結清即進入待 write-off。', isFATeam)}
+                {sectionHead('催告與終止', '滿 50 天發催告，滿 80 天發終止函；終止函寄出 15 天仍未結清即進入待 write-off。', isFATeam || is2CTeam)}
 
                 <div className="space-y-7">
                   <div>
@@ -499,7 +504,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                       {dateField('催告日期', demandNoticeDate, setDemandNoticeDate, isFATeam)}
                       {dateField('催告到期日', demandDueDate, setDemandDueDate, isFATeam)}
                       {renderDocUrlField()}
-                      {dateField('催告簡訊日期(CS)', demandSmsDate, setDemandSmsDate, isFATeam)}
+                      {dateField('催告簡訊日期(CS)', demandSmsDate, setDemandSmsDate, isFATeam || is2CTeam)}
                     </div>
                   </div>
 
@@ -508,7 +513,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {dateField('終止函寄出日期', terminationNoticeDate, setTerminationNoticeDate, isFATeam)}
                       {dateField('終止到期日', terminationDueDate, setTerminationDueDate, isFATeam)}
-                      {dateField('終止簡訊日期(CS)', terminationSmsDate, setTerminationSmsDate, isFATeam)}
+                      {dateField('終止簡訊日期(CS)', terminationSmsDate, setTerminationSmsDate, isFATeam || is2CTeam)}
                     </div>
                   </div>
 
@@ -533,7 +538,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                   </div>
                 </div>
 
-                {isFATeam && (
+                {(isFATeam || is2CTeam) && (
                   <div className="mt-5 flex justify-end">
                     <button type="submit" disabled={isSavingFA} className="btn btn-primary">
                       {isSavingFA && <Loader2 className="w-4 h-4 animate-spin" />}
