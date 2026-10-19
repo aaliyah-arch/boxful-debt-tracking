@@ -51,9 +51,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   const [isSavingDoc, setIsSavingDoc] = useState(false);
 
   // Form states - Close
-  const [isClosed, setIsClosed] = useState(false);
   const [closedDate, setClosedDate] = useState('');
-  const todayStr = () => format(new Date(), 'yyyy-MM-dd');
 
   const formatDateInput = (d?: string | null) => safeFormat(d, 'yyyy-MM-dd', '');
 
@@ -86,7 +84,6 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
       setFaNotes(data.faNotes || '');
 
       // Populate Close states
-      setIsClosed(data.isClosed);
       setClosedDate(formatDateInput(data.closedDate));
     } catch (err: any) {
       setFeedbackMsg({ type: 'error', text: err.message || '載入案件失敗' });
@@ -180,21 +177,23 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
   const handleSaveClose = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!caseData) return;
+    // 有選結案日期 → 結案；清空日期 → 重新開啟（只有原本已結案才需要）
+    const willClose = !!closedDate;
+    if (!willClose && !caseData.isClosed) {
+      showFail('請先選擇結案日期');
+      return;
+    }
     setIsSavingClose(true);
     setFeedbackMsg(null);
     try {
-      // 結案日期 = 轉為結案當下的日期；已結案的案件維持原結案日期
-      const effectiveClosedDate = isClosed
-        ? (caseData.isClosed && caseData.closedDate ? formatDateInput(caseData.closedDate) : todayStr())
-        : null;
       const res = await casesApi.closeCase(caseData.id, {
-        isClosed,
-        closedDate: effectiveClosedDate,
+        isClosed: willClose,
+        closedDate: willClose ? closedDate : null,
       });
-      setClosedDate(effectiveClosedDate || '');
+      setClosedDate(willClose ? closedDate : '');
       setCaseData(res.case);
-      setFeedbackMsg({ type: 'success', text: isClosed ? '案件已標記為已結案' : '案件已重新開啟' });
-      setResultDialog({ ok: true, text: isClosed ? '案件已標記為已結案，並同步回 Google 試算表' : '案件已重新開啟，並同步回 Google 試算表' });
+      setFeedbackMsg({ type: 'success', text: '已同步回寫試算表' });
+      setResultDialog({ ok: true, text: '已同步回寫試算表' });
       if (onCaseUpdated) onCaseUpdated(res.case);
     } catch (err: any) {
       showFail(errText(err, '結案操作失敗'));
@@ -416,10 +415,9 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                             closedDate: today,
                           });
                           setCaseData(res.case);
-                          setIsClosed(true);
                           setClosedDate(today);
                           setFeedbackMsg({ type: 'success', text: '已結案，並同步回 Google 試算表。' });
-                          setResultDialog({ ok: true, text: '已結案，並同步回 Google 試算表' });
+                          setResultDialog({ ok: true, text: '已同步回寫試算表' });
                           if (onCaseUpdated) onCaseUpdated(res.case);
                         } catch (err: any) {
                           showFail(errText(err, '結案失敗'));
@@ -547,30 +545,35 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
 
               {/* 結案 */}
               <form onSubmit={handleSaveClose} className="px-6 sm:px-8 py-7">
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex items-start justify-between gap-4 mb-5">
                   <div>
                     <h3 className="text-base font-bold text-ink-900">結案</h3>
                     <p className="mt-0.5 text-[13px] text-ink-500">
-                      {isClosed
-                        ? `結案日期 ${caseData.isClosed && closedDate ? closedDate : `${todayStr()}（儲存時帶入今天）`}`
-                        : '客戶繳清或完成沖銷後開啟。'}
+                      {caseData.isClosed
+                        ? '已結案。清空結案日期並儲存，可重新開啟案件。'
+                        : '客戶繳清或完成沖銷後，選擇結案日期並儲存。'}
                     </p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                  {caseData.isClosed && (
+                    <span className="flex-shrink-0 text-xs font-medium text-brand-800 bg-brand-50 rounded px-2 py-0.5">已結案</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
+                  <div>
+                    <label htmlFor="closed-date" className="field-label">結案日期</label>
                     <input
-                      type="checkbox"
-                      checked={isClosed}
-                      onChange={(e) => setIsClosed(e.target.checked)}
-                      className="sr-only peer"
-                      aria-label="已結案"
+                      id="closed-date"
+                      type="date"
+                      value={closedDate}
+                      onChange={(e) => setClosedDate(e.target.value)}
+                      className="field tabular-nums"
                     />
-                    <div className="w-10 h-6 bg-ink-200 rounded-full transition-colors peer-checked:bg-brand-600 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-400 peer-focus-visible:ring-offset-2 after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:rounded-full after:h-4 after:w-4 after:shadow-sm after:transition-transform peer-checked:after:translate-x-4" />
-                  </label>
+                  </div>
                 </div>
                 <div className="mt-5 flex justify-end">
                   <button type="submit" disabled={isSavingClose} className="btn btn-secondary">
                     {isSavingClose && <Loader2 className="w-4 h-4 animate-spin" />}
-                    儲存結案狀態
+                    儲存結案日期
                   </button>
                 </div>
               </form>
