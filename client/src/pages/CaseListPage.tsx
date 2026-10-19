@@ -16,7 +16,7 @@ import { format } from 'date-fns';
 import type { BusinessUnit } from '../types';
 import { casesApi } from '../api';
 import { getCasesSyncError } from '../api/standaloneStore';
-import { safeFormat } from '../utils/dateUtils';
+import { safeFormat, monthBucketLabel } from '../utils/dateUtils';
 import { StatusBadge } from '../components/StatusBadge';
 import { CaseDetailDrawer } from '../components/CaseDetailDrawer';
 import { AgingBar } from '../components/AgingBar';
@@ -285,7 +285,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
             className="btn btn-secondary !px-2.5"
             aria-label="移除帳單月份篩選"
           >
-            帳單月份：{monthBucket === 'older' ? '2026/06 前' : monthBucket}
+            帳單月份：{monthBucketLabel(monthBucket)}
             <X className="w-3.5 h-3.5" />
           </button>
         )}

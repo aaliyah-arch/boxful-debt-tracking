@@ -41,7 +41,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-ink-900">{unitName} 呆帳總覽</h1>
           <p className="mt-1 text-sm text-ink-500">
-            {data?.referenceDate ? `依 ${data.referenceDate} 匯入的週報計算` : '依最新匯入的週報計算'}
+            {data?.referenceDate
+              ? `依最新匯入的週報計算・帳單月份以 ${data.referenceDate} 為基準`
+              : '依最新匯入的週報計算'}
           </p>
         </div>
         <div className="flex items-center gap-2">

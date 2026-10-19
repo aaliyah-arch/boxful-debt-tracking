@@ -1,5 +1,6 @@
 import * as xlsx from 'xlsx';
-import { differenceInCalendarDays } from 'date-fns';
+import { differenceInCalendarDays, format } from 'date-fns';
+import { parseDateLoose } from './dateUtils';
 import type { StageType } from '../types';
 
 export interface RawRowData {
@@ -74,7 +75,10 @@ export function computeStage(input: {
 function parseDateValue(val: any): string | null {
   if (!val) return null;
   if (val instanceof Date && !isNaN(val.getTime())) {
-    return val.toISOString().split('T')[0];
+    // Excel 日期儲存格可能被讀成「當地午夜」或「UTC 午夜」（還可能差幾秒），
+    // 直接 toISOString() 在台灣時區會變成前一天（例如 8/1 變 7/31，月份就分錯）。
+    // 加 6 小時再取當地日期，兩種情況都會落在正確的那一天。
+    return format(new Date(val.getTime() + 6 * 60 * 60 * 1000), 'yyyy-MM-dd');
   }
   if (typeof val === 'number') {
     // Excel serial date to JS Date
@@ -83,9 +87,12 @@ function parseDateValue(val: any): string | null {
     return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
   }
   if (typeof val === 'string') {
+    // 2026/08/01、2026-8-1 等格式以當地日期解析，避免時區造成日期往前一天
+    const loose = parseDateLoose(val.trim());
+    if (loose) return format(loose, 'yyyy-MM-dd');
     const parsed = new Date(val.trim());
     if (!isNaN(parsed.getTime())) {
-      return parsed.toISOString().split('T')[0];
+      return format(parsed, 'yyyy-MM-dd');
     }
   }
   return null;
@@ -288,7 +295,8 @@ export async function parseSpreadsheetFile(file: File): Promise<{
       if (!existing.phone && phone) existing.phone = phone;
       if (!existing.address && address) existing.address = address;
       if (!existing.serviceType && serviceType) existing.serviceType = serviceType;
-      if (!existing.billDate && invDate) existing.billDate = invDate;
+      // 帳單日取所有未繳發票中最早的一張（代表這筆欠款從哪個月開始）
+      if (invDate && (!existing.billDate || invDate < existing.billDate)) existing.billDate = invDate;
       if (!existing.blueCode && blueCode) existing.blueCode = blueCode;
       if (name && !existing.name.includes(name)) existing.name = name;
     }

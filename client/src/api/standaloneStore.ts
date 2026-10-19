@@ -1,6 +1,14 @@
 import type { BusinessUnit, CaseRecord, DashboardOverview, Role, WhitelistItem, User } from '../types';
 import { parseSpreadsheetFile, generateSampleExcelBlob, computeStage } from '../utils/reportParser';
-import { normalizeDateString, parseDateLoose, isNonDateText } from '../utils/dateUtils';
+import {
+  normalizeDateString,
+  parseDateLoose,
+  isNonDateText,
+  getMonthBuckets,
+  monthBucketOf,
+  TOTAL_BUCKET_KEY,
+} from '../utils/dateUtils';
+import { format } from 'date-fns';
 
 const WHITELIST_STORAGE_KEY = 'boxful_whitelist_data';
 const CASES_STORAGE_KEY = 'boxful_cases_data';
@@ -304,10 +312,9 @@ const DEFAULT_WHITELIST: WhitelistItem[] = [
 ];
 
 /** 總覽表的帳單月份分組（與 getDashboardOverview 相同規則） */
-export function matchesMonthBucket(c: CaseRecord, bucket: string): boolean {
-  if (!bucket || bucket === 'total') return true;
-  if (bucket === 'older') return (c.billDate || '') < '2026-07-01';
-  return (c.billDate || '').startsWith(bucket.replace('/', '-'));
+export function matchesMonthBucket(c: CaseRecord, bucket: string, ref: Date = new Date()): boolean {
+  if (!bucket || bucket === TOTAL_BUCKET_KEY) return true;
+  return monthBucketOf(c.billDate, ref) === bucket;
 }
 
 export const standaloneStore = {
@@ -645,13 +652,9 @@ export const standaloneStore = {
       { code: 'CLOSED', label: '已結案' },
     ];
 
-    const timeBuckets = [
-      { key: 'older', label: '2026/06 前' },
-      { key: '2026/07', label: '2026/07' },
-      { key: '2026/08', label: '2026/08' },
-      { key: '2026/09', label: '2026/09' },
-      { key: 'total', label: '總計', isTotal: true },
-    ];
+    // 月份欄位依今天自動計算（例：10 月 → 2026/07前、08、09、10）
+    const refDate = new Date();
+    const timeBuckets = getMonthBuckets(refDate);
 
     const stageBreakdown: Record<string, { count: number; amount: number }> = {};
     stages.forEach((s) => {
@@ -676,7 +679,7 @@ export const standaloneStore = {
 
       timeBuckets.forEach((tb) => {
         if (tb.isTotal) return;
-        const bCases = stageCases.filter((c) => matchesMonthBucket(c, tb.key));
+        const bCases = stageCases.filter((c) => matchesMonthBucket(c, tb.key, refDate));
         const amt = bCases.reduce((sum, c) => sum + c.outstandingAmount, 0);
         buckets[tb.key] = {
           amount: amt,
@@ -704,7 +707,7 @@ export const standaloneStore = {
     };
     timeBuckets.forEach((tb) => {
       if (tb.isTotal) return;
-      const bCases = allCases.filter((c) => matchesMonthBucket(c, tb.key));
+      const bCases = allCases.filter((c) => matchesMonthBucket(c, tb.key, refDate));
       const amt = bCases.reduce((sum, c) => sum + c.outstandingAmount, 0);
       totalsBuckets[tb.key] = {
         amount: amt,
@@ -716,7 +719,7 @@ export const standaloneStore = {
 
     return {
       businessUnit,
-      referenceDate: '2026-09-14',
+      referenceDate: format(refDate, 'yyyy-MM-dd'),
       timeBuckets,
       rows,
       totalsRow: {
