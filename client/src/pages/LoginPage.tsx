@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
-import { AlertCircle, ChevronRight } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import type { Role } from '../types';
 import { Logo } from '../components/Logo';
 
 export const LoginPage: React.FC = () => {
-  const { devLogin, loginWithFirebaseGoogle, isFirebaseConfigured } = useAuth();
+  const { loginWithFirebaseGoogle, isFirebaseConfigured } = useAuth();
   const [error, setError] = useState<string | null>(null);
-  const [loadingRole, setLoadingRole] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
@@ -22,29 +20,11 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleDevLogin = async (role: Role) => {
-    setLoadingRole(role);
-    setError(null);
-    try {
-      await devLogin(role);
-    } catch (err: any) {
-      setError(err.message || '登入失敗');
-    } finally {
-      setLoadingRole(null);
-    }
-  };
-
   const ladder = [
     { day: '30', name: '勸導', h: 'h-10', color: 'bg-stage-1' },
     { day: '50', name: '催告', h: 'h-16', color: 'bg-stage-2' },
     { day: '80', name: '終止', h: 'h-24', color: 'bg-stage-3' },
     { day: '95', name: 'write-off', h: 'h-32', color: 'bg-stage-4' },
-  ];
-
-  const demoRoles: Array<{ role: Role; title: string; desc: string }> = [
-    { role: 'TWO_C_TEAM', title: '2C 催帳專員', desc: '記錄 Line、Email、簡訊、電話通知與催帳備註' },
-    { role: 'FA_TEAM', title: 'FA 財務法務專員', desc: '處理催告、終止函與存證信函，上傳文件' },
-    { role: 'ADMIN', title: '系統主管', desc: '檢視全部案件並管理信箱白名單' },
   ];
 
   return (
@@ -87,9 +67,6 @@ export const LoginPage: React.FC = () => {
           </div>
 
           <h2 className="text-2xl font-bold tracking-tight text-ink-900">登入</h2>
-          <p className="mt-1.5 text-sm text-ink-500">
-            使用 @boxful.com.tw 帳號，系統會依白名單給予對應權限。
-          </p>
 
           {error && (
             <div role="alert" className="mt-6 p-3 rounded-lg bg-red-50 text-red-800 text-[13px] flex items-start gap-2">
@@ -100,7 +77,7 @@ export const LoginPage: React.FC = () => {
 
           <button
             onClick={handleGoogleLogin}
-            disabled={isGoogleLoading || !!loadingRole}
+            disabled={isGoogleLoading}
             className="btn btn-secondary w-full mt-8 !py-2.5 !text-sm"
           >
             {isGoogleLoading ? (
@@ -131,35 +108,6 @@ export const LoginPage: React.FC = () => {
             <p className="mt-2 text-xs text-amber-700">尚未設定 Firebase，Google 登入暫時無法使用。</p>
           )}
 
-          <div className="mt-10">
-            <div className="flex items-center gap-3 text-xs font-semibold text-ink-500">
-              以測試角色進入
-              <span className="flex-1 h-px bg-ink-200" />
-            </div>
-            <ul className="mt-3 divide-y divide-ink-100 border-y border-ink-100">
-              {demoRoles.map((r) => (
-                <li key={r.role}>
-                  <button
-                    onClick={() => handleDevLogin(r.role)}
-                    disabled={!!loadingRole}
-                    className="group w-full text-left py-3 flex items-center gap-3 disabled:opacity-60"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-ink-900 group-hover:text-brand-700 transition-colors">
-                        {r.title}
-                      </div>
-                      <div className="text-xs text-ink-500 mt-0.5">{r.desc}</div>
-                    </div>
-                    {loadingRole === r.role ? (
-                      <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4 text-ink-300 group-hover:text-brand-600 transition-colors" />
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
         </div>
       </main>
     </div>
