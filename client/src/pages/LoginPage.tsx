@@ -70,9 +70,6 @@ export const LoginPage: React.FC = () => {
           <h1 className="mt-7 text-[30px] sm:text-[34px] leading-tight font-extrabold tracking-tight text-ink-900">
             Boxful 呆帳追蹤
           </h1>
-          <p className="mt-3 text-[15px] leading-relaxed text-ink-500">
-            從逾期第 30 天，一路追到結案。
-          </p>
 
           <button
             onClick={handleGoogleLogin}
