@@ -165,7 +165,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
       });
       setCaseData(res.case);
       setFeedbackMsg({ type: 'success', text: '催告與終止紀錄已儲存，並同步回 Google 試算表' });
-      setResultDialog({ ok: true, text: 'FA 催告與終止紀錄已同步回 Google 試算表' });
+      setResultDialog({ ok: true, text: '催告與終止紀錄已同步回 Google 試算表' });
       if (onCaseUpdated) onCaseUpdated(res.case);
     } catch (err: any) {
       showFail(errText(err, '更新失敗'));
@@ -469,15 +469,15 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                   <div className="mt-5 flex justify-end">
                     <button type="submit" disabled={isSaving2C} className="btn btn-primary">
                       {isSaving2C && <Loader2 className="w-4 h-4 animate-spin" />}
-                      儲存 CS 紀錄
+                      儲存紀錄
                     </button>
                   </div>
                 )}
               </form>
 
-              {/* FA 催告與終止 */}
+              {/* 催告與終止 */}
               <form onSubmit={handleSaveFA} className="px-6 sm:px-8 py-7">
-                {sectionHead('FA 催告與終止', '滿 50 天發催告，滿 80 天發終止函；終止函寄出 15 天仍未結清即進入待 write-off。', isFATeam)}
+                {sectionHead('催告與終止', '滿 50 天發催告，滿 80 天發終止函；終止函寄出 15 天仍未結清即進入待 write-off。', isFATeam)}
 
                 <div className="space-y-7">
                   <div>
@@ -496,19 +496,19 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                           <option value="CERTIFIED_LETTER">存證信函</option>
                         </select>
                       </div>
-                      {dateField('催告簡訊日期', demandSmsDate, setDemandSmsDate, isFATeam)}
                       {dateField('催告日期', demandNoticeDate, setDemandNoticeDate, isFATeam)}
                       {dateField('催告到期日', demandDueDate, setDemandDueDate, isFATeam)}
                       {renderDocUrlField()}
+                      {dateField('催告簡訊日期(CS)', demandSmsDate, setDemandSmsDate, isFATeam)}
                     </div>
                   </div>
 
                   <div>
                     {subHead('bg-stage-3', '終止', caseData.outstandingDays >= 80, '已滿 80 天')}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {dateField('終止簡訊日期', terminationSmsDate, setTerminationSmsDate, isFATeam)}
                       {dateField('終止函寄出日期', terminationNoticeDate, setTerminationNoticeDate, isFATeam)}
                       {dateField('終止到期日', terminationDueDate, setTerminationDueDate, isFATeam)}
+                      {dateField('終止簡訊日期(CS)', terminationSmsDate, setTerminationSmsDate, isFATeam)}
                     </div>
                   </div>
 
@@ -537,7 +537,7 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
                   <div className="mt-5 flex justify-end">
                     <button type="submit" disabled={isSavingFA} className="btn btn-primary">
                       {isSavingFA && <Loader2 className="w-4 h-4 animate-spin" />}
-                      儲存 FA 紀錄
+                      儲存紀錄
                     </button>
                   </div>
                 )}
