@@ -324,12 +324,10 @@ export const standaloneStore = {
       const saved = localStorage.getItem(WHITELIST_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // If it's the old mock list or old admin mapping, replace with correct team roles
-        if (
-          Array.isArray(parsed) &&
-          (parsed.some((x: any) => x.email?.includes('2c.team@boxful.com.tw')) ||
-           parsed.some((x: any) => x.email === 'aaliyah@boxful.com.tw' && x.role === 'ADMIN'))
-        ) {
+        // 舊版測試用假名單才重設為預設名單。
+        // （不可再依「aaliyah 為 ADMIN」重設：試算表 FA、2C 都勾 O 時本來就會同步成 ADMIN，
+        //  重設會把剛同步的權限蓋回預設，導致無法上傳週報）
+        if (Array.isArray(parsed) && parsed.some((x: any) => x.email?.includes('2c.team@boxful.com.tw'))) {
           localStorage.setItem(WHITELIST_STORAGE_KEY, JSON.stringify(DEFAULT_WHITELIST));
           return DEFAULT_WHITELIST;
         }
@@ -456,6 +454,9 @@ export const standaloneStore = {
         role = 'FA_TEAM';
       } else if (noteStr === 'O') {
         role = 'TWO_C_TEAM';
+      } else if (roleStr === 'X' && noteStr === 'X') {
+        // 兩欄都是 X：只能檢視，不能上傳週報或編輯
+        role = 'VIEWER';
       } else if (roleStr.includes('ADMIN') || roleStr.includes('主管') || roleStr.includes('管理')) {
         role = 'ADMIN';
       } else if (roleStr.includes('FA') || roleStr.includes('法務') || roleStr.includes('財務')) {
