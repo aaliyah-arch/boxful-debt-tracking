@@ -9,16 +9,14 @@ import {
   TOTAL_BUCKET_KEY,
 } from '../utils/dateUtils';
 import { format } from 'date-fns';
-import { auth } from '../config/firebase';
+import { callServer } from './gas';
 
 const WHITELIST_STORAGE_KEY = 'boxful_whitelist_data';
 const CASES_STORAGE_KEY = 'boxful_cases_data';
 const IMPORT_HISTORY_STORAGE_KEY = 'boxful_import_history';
-export const DEFAULT_GAS_URL =
-  'https://script.google.com/macros/s/AKfycbx-1i9fSZXDylorowLFoQlz43aV1tlc3VxLDlDxA7jt1xZ_5z2npeP1QbHXoOyRm-8d/exec';
+/** 白名單改由伺服器讀取，前端不再保存網址 */
+export const DEFAULT_GAS_URL = 'server';
 
-export const DEFAULT_DEBT_BACKUP_GAS_URL =
-  'https://script.google.com/macros/s/AKfycbzbayhWa_N7qzx_jhw7R9uRp1v6itw7zK8amzcbdEXHMP96mt91dXaPnUPhuEj9JvcR/exec';
 
 /**
  * 上傳檔案至 Google 雲端（試算表所在資料夾的「2bad-debtbackup 附件」），回傳檔案連結。
@@ -63,61 +61,23 @@ export interface SheetSyncStatus {
   message: string;
 }
 
-/** 取得目前登入者的 Google 登入憑證（Firebase 會自動更新，過期也不用重新登入） */
-async function getLoginToken(): Promise<string> {
-  if (!auth) throw new Error('登入元件尚未設定');
-  await auth.authStateReady();
-  const u = auth.currentUser;
-  if (!u) {
-    forceRelogin();
-    throw new Error('登入已失效，請重新用公司 Google 帳號登入');
-  }
-  return u.getIdToken();
-}
-
-function forceRelogin() {
-  localStorage.removeItem('auth_token');
-  localStorage.removeItem('auth_user');
-  window.location.reload();
-}
-
 /**
- * 呼叫 Apps Script 並等待回應；任何失敗都會丟出可讀的錯誤訊息
+ * 呼叫 Apps Script 伺服器並等待回應；任何失敗都會丟出可讀的錯誤訊息
  */
 async function postToGas(action: string, payload: Record<string, any>): Promise<any> {
-  if (!DEFAULT_DEBT_BACKUP_GAS_URL) throw new Error('尚未設定 Google 試算表 Apps Script 網址');
-  const idToken = await getLoginToken();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
-  let res: Response;
+  let text: string;
   try {
-    res = await fetch(DEFAULT_DEBT_BACKUP_GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, ...payload, idToken }),
-      signal: controller.signal,
-    });
+    text = await callServer<string>('api', action, JSON.stringify(payload));
   } catch (e: any) {
-    if (e?.name === 'AbortError') throw new Error('Apps Script 回應逾時（超過 5 分鐘）');
-    throw new Error(
-      '無法連線到 Google Apps Script。請確認部署設定「誰可以存取」為「任何人」，並已用「新版本」重新部署'
-    );
-  } finally {
-    clearTimeout(timer);
+    throw new Error(`無法連線到 Google Apps Script：${e?.message || '未知錯誤'}`);
   }
-  if (!res.ok) throw new Error(`Apps Script 回應 HTTP ${res.status}`);
-  const text = await res.text();
   let json: any;
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error('Apps Script 回應格式錯誤（可能需要重新授權或重新部署）');
+    throw new Error('Apps Script 回應格式錯誤（可能需要重新部署）');
   }
-  if (json.code === 'UNAUTHORIZED') {
-    forceRelogin();
-    throw new Error(json.error || '登入已失效，請重新登入');
-  }
-  if (!json.success) throw new Error(`Apps Script 錯誤：${json.error || '未知錯誤'}`);
+  if (!json.success) throw new Error(json.code === 'UNAUTHORIZED' ? json.error : `Apps Script 錯誤：${json.error || '未知錯誤'}`);
   return json.result;
 }
 
@@ -412,46 +372,32 @@ export const standaloneStore = {
   },
 
   syncFromGoogleAppsScript: async (url: string) => {
-    const res = await fetch(url);
-    const contentType = res.headers.get('content-type') || '';
-    if (!res.ok) {
-      throw new Error(`Google Apps Script 連線失敗 (HTTP ${res.status})`);
-    }
+    void url; // 網址改由伺服器端設定
+    const text = await callServer<string>('fetchWhitelistRaw');
 
     let items: Array<{ email: string; role?: string; note?: string }> = [];
-    if (contentType.includes('application/json')) {
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        items = data;
-      } else if (Array.isArray(data.data)) {
-        items = data.data;
-      } else if (Array.isArray(data.users)) {
-        items = data.users;
-      }
-    } else {
-      const text = await res.text();
-      try {
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) items = parsed;
-        else if (Array.isArray(parsed.data)) items = parsed.data;
-      } catch {
-        // Parse CSV
-        const lines = text.split(/\r?\n/).filter((l) => l.trim());
-        if (lines.length > 1) {
-          const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-          const emailIdx = headers.findIndex((h) => h.includes('email') || h.includes('信箱'));
-          const roleIdx = headers.findIndex((h) => h.includes('role') || h.includes('角色'));
-          const noteIdx = headers.findIndex((h) => h.includes('note') || h.includes('備註'));
-          for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
-            const email = cols[emailIdx >= 0 ? emailIdx : 0];
-            if (email && email.includes('@')) {
-              items.push({
-                email,
-                role: roleIdx >= 0 ? cols[roleIdx] : 'TWO_C_TEAM',
-                note: noteIdx >= 0 ? cols[noteIdx] : '',
-              });
-            }
+    try {
+      const data = JSON.parse(text);
+      if (Array.isArray(data)) items = data;
+      else if (Array.isArray(data.data)) items = data.data;
+      else if (Array.isArray(data.users)) items = data.users;
+    } catch {
+      // Parse CSV
+      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length > 1) {
+        const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
+        const emailIdx = headers.findIndex((h) => h.includes('email') || h.includes('信箱'));
+        const roleIdx = headers.findIndex((h) => h.includes('role') || h.includes('角色'));
+        const noteIdx = headers.findIndex((h) => h.includes('note') || h.includes('備註'));
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
+          const email = cols[emailIdx >= 0 ? emailIdx : 0];
+          if (email && email.includes('@')) {
+            items.push({
+              email,
+              role: roleIdx >= 0 ? cols[roleIdx] : 'TWO_C_TEAM',
+              note: noteIdx >= 0 ? cols[noteIdx] : '',
+            });
           }
         }
       }

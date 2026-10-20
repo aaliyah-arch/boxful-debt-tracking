@@ -30,67 +30,88 @@ var SHEET_NAMES = {
   PEPPER_TRACKING: 'Pepper扣款失敗通知追蹤'
 };
 
-var SCRIPT_VERSION = '2026-10-20-auth';
+var SCRIPT_VERSION = '2026-10-20-gas-web';
 var UPLOAD_FOLDER_NAME = '2bad-debtbackup 附件';
 
 // ==============================================================================
-// 身分驗證設定：只有用公司 Google 帳號登入的人可以讀寫
+// 身分驗證設定：網頁改由 Apps Script 直接提供，只有公司 Google 帳號能開啟與讀寫
 // ==============================================================================
 var ALLOWED_DOMAIN = 'boxful.com.tw';
-// 前端 Firebase 設定裡的 apiKey（本來就公開在網頁上，用來向 Google 驗證登入憑證）
-var FIREBASE_API_KEY = 'AIzaSyD3mj3W295Cd0KM0WL5TLnrl7tGn5IMpis';
+// 人員白名單（FA / 2C 權限）所在的 Apps Script 網址，由伺服器端讀取，不再出現在網頁程式裡
+var WHITELIST_GAS_URL = 'https://script.google.com/macros/s/AKfycbx-1i9fSZXDylorowLFoQlz43aV1tlc3VxLDlDxA7jt1xZ_5z2npeP1QbHXoOyRm-8d/exec';
+// 需要「可編輯」權限的操作（VIEWER 只能讀取）
+var WRITE_ACTIONS = { OVERWRITE_RAW_REPORT: true, SYNC_SUMMARY_TRACKING: true, UPDATE_ROW_STATUS: true, UPLOAD_FILE: true };
 
-/**
- * 驗證前端送來的 Firebase 登入憑證（idToken），回傳登入者 email。
- * 驗證失敗會丟出 UNAUTHORIZED 錯誤。
- */
-function verifyCaller(idToken) {
-  if (!idToken) throw new Error('UNAUTHORIZED: 未登入');
-
-  var cache = CacheService.getScriptCache();
-  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken);
-  var cacheKey = 'auth_' + Utilities.base64EncodeWebSafe(digest);
-  var cached = cache.get(cacheKey);
-  if (cached) return cached;
-
-  var res = UrlFetchApp.fetch(
-    'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + FIREBASE_API_KEY,
-    {
-      method: 'post',
-      contentType: 'application/json',
-      payload: JSON.stringify({ idToken: idToken }),
-      muteHttpExceptions: true
-    }
-  );
-  if (res.getResponseCode() !== 200) {
-    throw new Error('UNAUTHORIZED: 登入已過期，請重新登入');
-  }
-  var users = JSON.parse(res.getContentText()).users || [];
-  var user = users[0];
-  if (!user) throw new Error('UNAUTHORIZED: 找不到登入帳號');
-
-  var email = String(user.email || '').toLowerCase();
-  var isGoogle = (user.providerUserInfo || []).some(function (p) { return p.providerId === 'google.com'; });
-  if (!user.emailVerified || !isGoogle) {
-    throw new Error('UNAUTHORIZED: 請使用 Google 帳號登入');
+/** 取得目前開啟網頁的使用者 email，不是公司帳號就丟出錯誤 */
+function requireCompanyUser_() {
+  var email = String(Session.getActiveUser().getEmail() || '').toLowerCase();
+  if (!email) {
+    throw new Error('無法取得登入帳號。請確認此程式由公司帳號部署，且存取權設為「' + ALLOWED_DOMAIN + ' 網域內的任何人」');
   }
   if (email.slice(-(ALLOWED_DOMAIN.length + 1)) !== '@' + ALLOWED_DOMAIN) {
-    throw new Error('UNAUTHORIZED: 僅限 @' + ALLOWED_DOMAIN + ' 公司帳號（目前為 ' + email + '）');
+    throw new Error('僅限 @' + ALLOWED_DOMAIN + ' 公司帳號使用（目前為 ' + email + '）');
   }
-
-  cache.put(cacheKey, email, 600); // 10 分鐘內同一憑證不重複驗證
   return email;
 }
 
-/** 在編輯器手動執行一次，確認驗證功能與授權正常（應顯示「UNAUTHORIZED: 未登入」） */
-function testAuth() {
+/** 從白名單 Apps Script 讀取原始資料（快取 5 分鐘） */
+function fetchWhitelistText_() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get('whitelist_raw');
+  if (cached) return cached;
+  var res = UrlFetchApp.fetch(WHITELIST_GAS_URL, { muteHttpExceptions: true, followRedirects: true });
+  if (res.getResponseCode() !== 200) throw new Error('讀取人員白名單失敗 (HTTP ' + res.getResponseCode() + ')');
+  var text = res.getContentText();
+  if (text.length < 90000) cache.put('whitelist_raw', text, 300);
+  return text;
+}
+
+/** 解析白名單成 [{email, role, note}]，與前端原本的規則相同 */
+function parseWhitelist_(text) {
+  var items = [];
   try {
-    verifyCaller('');
+    var data = JSON.parse(text);
+    items = Array.isArray(data) ? data : (data.data || data.users || []);
   } catch (e) {
-    Logger.log('驗證功能正常：' + e.message);
+    var lines = text.split(/\r?\n/).filter(function (l) { return l.trim(); });
+    var headers = (lines[0] || '').split(',').map(function (h) { return h.trim().toLowerCase(); });
+    var ei = headers.findIndex(function (h) { return h.indexOf('email') >= 0 || h.indexOf('信箱') >= 0; });
+    var ri = headers.findIndex(function (h) { return h.indexOf('role') >= 0 || h.indexOf('角色') >= 0; });
+    var ni = headers.findIndex(function (h) { return h.indexOf('note') >= 0 || h.indexOf('備註') >= 0; });
+    for (var i = 1; i < lines.length; i++) {
+      var c = lines[i].split(',').map(function (x) { return x.trim().replace(/^"|"$/g, ''); });
+      items.push({ email: c[ei >= 0 ? ei : 0], role: ri >= 0 ? c[ri] : '', note: ni >= 0 ? c[ni] : '' });
+    }
   }
-  UrlFetchApp.fetch('https://www.google.com', { muteHttpExceptions: true });
-  Logger.log('對外連線授權正常');
+  return items.filter(function (x) { return x && x.email; }).map(function (x) {
+    var r = String(x.role || '').toUpperCase().trim();
+    var n = String(x.note || '').toUpperCase().trim();
+    var role = 'TWO_C_TEAM';
+    if (r === 'O' && n === 'O') role = 'ADMIN';
+    else if (r === 'O') role = 'FA_TEAM';
+    else if (n === 'O') role = 'TWO_C_TEAM';
+    else if (r === 'X' && n === 'X') role = 'VIEWER';
+    else if (/ADMIN|主管|管理/.test(r)) role = 'ADMIN';
+    else if (/FA|法務|財務/.test(r)) role = 'FA_TEAM';
+    else if (/2C|催帳|催款/.test(r)) role = 'TWO_C_TEAM';
+    else if (/VIEWER|訪客/.test(r)) role = 'VIEWER';
+    return { email: String(x.email).trim().toLowerCase(), role: role };
+  });
+}
+
+/** 查詢使用者角色；不在白名單的公司帳號只能檢視 */
+function lookupRole_(email) {
+  var list = parseWhitelist_(fetchWhitelistText_());
+  var found = list.filter(function (x) { return x.email === email; })[0];
+  return found ? found.role : 'VIEWER';
+}
+
+/** 在編輯器手動執行一次，完成授權並確認可以讀到白名單 */
+function testSetup() {
+  var list = parseWhitelist_(fetchWhitelistText_());
+  Logger.log('白名單共 ' + list.length + ' 人');
+  Logger.log('試算表：' + SpreadsheetApp.getActiveSpreadsheet().getName());
+  Logger.log('你的帳號：' + Session.getActiveUser().getEmail());
 }
 
 /**
@@ -158,21 +179,48 @@ var DEFAULT_TRACKING_HEADERS = {
 };
 
 // ==============================================================================
-// Web App 入口
+// Web App 入口：開啟網址時直接顯示網頁（index.html），資料一律透過 google.script.run 讀寫
 // ==============================================================================
 
-function doPost(e) {
-  // 先驗證身分，未通過就直接拒絕（不佔用鎖定）
-  var payload;
+function doGet(e) {
   try {
-    if (!e.postData || !e.postData.contents) {
-      return jsonResponse({ success: false, error: '未提供 POST 資料' });
+    requireCompanyUser_();
+  } catch (err) {
+    return HtmlService.createHtmlOutput(
+      '<div style="font-family:sans-serif;padding:40px;text-align:center"><h2>無法開啟</h2><p>' +
+      String(err.message).replace(/</g, '&lt;') + '</p></div>'
+    ).setTitle('呆帳催款追蹤系統');
+  }
+  return HtmlService.createHtmlOutputFromFile('index')
+    .setTitle('呆帳催款追蹤系統 · Boxful')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** 前端取得目前登入者 */
+function getCurrentUser() {
+  var email = requireCompanyUser_();
+  var role = 'VIEWER';
+  try { role = lookupRole_(email); } catch (e) { /* 白名單讀不到時先給檢視權限 */ }
+  return JSON.stringify({ id: 'usr-' + email, email: email, name: email.split('@')[0], role: role });
+}
+
+/** 前端讀取白名單原始資料（白名單頁面同步用） */
+function fetchWhitelistRaw() {
+  requireCompanyUser_();
+  return fetchWhitelistText_();
+}
+
+/** 前端讀寫案件的唯一入口；payloadJson 為 JSON 字串，回傳 JSON 字串 */
+function api(action, payloadJson) {
+  var email, payload;
+  try {
+    email = requireCompanyUser_();
+    payload = JSON.parse(payloadJson || '{}');
+    if (WRITE_ACTIONS[action] && lookupRole_(email) === 'VIEWER') {
+      throw new Error('你的帳號只有檢視權限，無法修改資料');
     }
-    payload = JSON.parse(e.postData.contents);
-    payload.callerEmail = verifyCaller(payload.idToken);
-    delete payload.idToken;
   } catch (authErr) {
-    return jsonResponse({ success: false, code: 'UNAUTHORIZED', version: SCRIPT_VERSION, error: authErr.message });
+    return JSON.stringify({ success: false, code: 'UNAUTHORIZED', error: authErr.message });
   }
 
   var lock = LockService.getScriptLock();
@@ -180,7 +228,6 @@ function doPost(e) {
     // 報表回寫可能需要較長時間，最多等候 2 分鐘取得鎖定
     lock.waitLock(120000);
 
-    var action = payload.action;
     var businessUnit = (payload.businessUnit || '').toUpperCase(); // 'VALET' | 'PEPPER'
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var result;
@@ -196,27 +243,14 @@ function doPost(e) {
     } else if (action === 'UPLOAD_FILE') {
       result = handleUploadFile(ss, payload);
     } else {
-      return jsonResponse({ success: false, error: '未知操作: ' + action });
+      return JSON.stringify({ success: false, error: '未知操作: ' + action });
     }
-    return jsonResponse({ success: true, version: SCRIPT_VERSION, action: action, result: result });
+    return JSON.stringify({ success: true, version: SCRIPT_VERSION, action: action, result: result });
   } catch (err) {
-    return jsonResponse({ success: false, version: SCRIPT_VERSION, error: err.toString() });
+    return JSON.stringify({ success: false, version: SCRIPT_VERSION, error: err.toString() });
   } finally {
     lock.releaseLock();
   }
-}
-
-function doGet(e) {
-  return jsonResponse({
-    status: 'ok',
-    version: SCRIPT_VERSION,
-    message: '2bad-debtbackup Google Apps Script Web App 正常運作中'
-  });
-}
-
-function jsonResponse(data) {
-  return ContentService.createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // ==============================================================================

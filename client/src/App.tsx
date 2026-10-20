@@ -20,7 +20,7 @@ const queryClient = new QueryClient({
 });
 
 const MainLayout: React.FC = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, authError } = useAuth();
   const [businessUnit, setBusinessUnit] = useState<BusinessUnit>('VALET');
   const [activeTab, setActiveTab] = useState<'dashboard' | 'cases'>('dashboard');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -63,6 +63,17 @@ const MainLayout: React.FC = () => {
         <div className="flex items-center gap-3 text-sm text-ink-500">
           <div className="w-4 h-4 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
           系統載入中
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated && authError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-md text-center space-y-2">
+          <h2 className="text-lg font-bold text-ink-800">無法開啟系統</h2>
+          <p className="text-sm text-ink-500">{authError}</p>
         </div>
       </div>
     );

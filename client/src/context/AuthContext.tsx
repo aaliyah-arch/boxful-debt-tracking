@@ -3,11 +3,13 @@ import { signInWithPopup, signOut, GoogleAuthProvider } from 'firebase/auth';
 import type { User, Role } from '../types';
 import { authApi } from '../api';
 import { auth, googleProvider, isFirebaseConfigured } from '../config/firebase';
+import { isGasHosted, callServer } from '../api/gas';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  authError: string | null;
   isFirebaseConfigured: boolean;
   loginWithGoogle: (credential: string) => Promise<void>;
   loginWithFirebaseGoogle: () => Promise<void>;
@@ -23,9 +25,24 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const initAuth = async () => {
+      // 網頁由 Apps Script 提供：Google 已確認登入身分，直接向伺服器取得使用者與權限
+      if (isGasHosted()) {
+        try {
+          const u = JSON.parse(await callServer<string>('getCurrentUser')) as User;
+          localStorage.setItem('auth_token', 'gas-session');
+          localStorage.setItem('auth_user', JSON.stringify(u));
+          setUser(u);
+        } catch (err: any) {
+          setAuthError(err?.message || '無法確認登入身分');
+        }
+        setIsLoading(false);
+        return;
+      }
+
       const token = localStorage.getItem('auth_token');
       const savedUser = localStorage.getItem('auth_user');
 
@@ -103,6 +120,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    if (isGasHosted()) {
+      // Apps Script 網頁使用 Google 帳號登入，切換帳號需登出 Google
+      window.open('https://accounts.google.com/Logout', '_blank');
+      return;
+    }
     if (auth) signOut(auth).catch(() => {});
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_user');
@@ -119,6 +141,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         isAuthenticated: !!user,
         isLoading,
+        authError,
         isFirebaseConfigured,
         loginWithGoogle,
         loginWithFirebaseGoogle,
