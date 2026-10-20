@@ -30,8 +30,68 @@ var SHEET_NAMES = {
   PEPPER_TRACKING: 'Pepper扣款失敗通知追蹤'
 };
 
-var SCRIPT_VERSION = '2026-10-17';
+var SCRIPT_VERSION = '2026-10-20-auth';
 var UPLOAD_FOLDER_NAME = '2bad-debtbackup 附件';
+
+// ==============================================================================
+// 身分驗證設定：只有用公司 Google 帳號登入的人可以讀寫
+// ==============================================================================
+var ALLOWED_DOMAIN = 'boxful.com.tw';
+// 前端 Firebase 設定裡的 apiKey（本來就公開在網頁上，用來向 Google 驗證登入憑證）
+var FIREBASE_API_KEY = 'AIzaSyD3mj3W295Cd0KM0WL5TLnrl7tGn5IMpis';
+
+/**
+ * 驗證前端送來的 Firebase 登入憑證（idToken），回傳登入者 email。
+ * 驗證失敗會丟出 UNAUTHORIZED 錯誤。
+ */
+function verifyCaller(idToken) {
+  if (!idToken) throw new Error('UNAUTHORIZED: 未登入');
+
+  var cache = CacheService.getScriptCache();
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idToken);
+  var cacheKey = 'auth_' + Utilities.base64EncodeWebSafe(digest);
+  var cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  var res = UrlFetchApp.fetch(
+    'https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + FIREBASE_API_KEY,
+    {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ idToken: idToken }),
+      muteHttpExceptions: true
+    }
+  );
+  if (res.getResponseCode() !== 200) {
+    throw new Error('UNAUTHORIZED: 登入已過期，請重新登入');
+  }
+  var users = JSON.parse(res.getContentText()).users || [];
+  var user = users[0];
+  if (!user) throw new Error('UNAUTHORIZED: 找不到登入帳號');
+
+  var email = String(user.email || '').toLowerCase();
+  var isGoogle = (user.providerUserInfo || []).some(function (p) { return p.providerId === 'google.com'; });
+  if (!user.emailVerified || !isGoogle) {
+    throw new Error('UNAUTHORIZED: 請使用 Google 帳號登入');
+  }
+  if (email.slice(-(ALLOWED_DOMAIN.length + 1)) !== '@' + ALLOWED_DOMAIN) {
+    throw new Error('UNAUTHORIZED: 僅限 @' + ALLOWED_DOMAIN + ' 公司帳號（目前為 ' + email + '）');
+  }
+
+  cache.put(cacheKey, email, 600); // 10 分鐘內同一憑證不重複驗證
+  return email;
+}
+
+/** 在編輯器手動執行一次，確認驗證功能與授權正常（應顯示「UNAUTHORIZED: 未登入」） */
+function testAuth() {
+  try {
+    verifyCaller('');
+  } catch (e) {
+    Logger.log('驗證功能正常：' + e.message);
+  }
+  UrlFetchApp.fetch('https://www.google.com', { muteHttpExceptions: true });
+  Logger.log('對外連線授權正常');
+}
 
 /**
  * 追蹤表欄位定義
@@ -102,15 +162,24 @@ var DEFAULT_TRACKING_HEADERS = {
 // ==============================================================================
 
 function doPost(e) {
+  // 先驗證身分，未通過就直接拒絕（不佔用鎖定）
+  var payload;
+  try {
+    if (!e.postData || !e.postData.contents) {
+      return jsonResponse({ success: false, error: '未提供 POST 資料' });
+    }
+    payload = JSON.parse(e.postData.contents);
+    payload.callerEmail = verifyCaller(payload.idToken);
+    delete payload.idToken;
+  } catch (authErr) {
+    return jsonResponse({ success: false, code: 'UNAUTHORIZED', version: SCRIPT_VERSION, error: authErr.message });
+  }
+
   var lock = LockService.getScriptLock();
   try {
     // 報表回寫可能需要較長時間，最多等候 2 分鐘取得鎖定
     lock.waitLock(120000);
 
-    if (!e.postData || !e.postData.contents) {
-      return jsonResponse({ success: false, error: '未提供 POST 資料' });
-    }
-    var payload = JSON.parse(e.postData.contents);
     var action = payload.action;
     var businessUnit = (payload.businessUnit || '').toUpperCase(); // 'VALET' | 'PEPPER'
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -131,7 +200,7 @@ function doPost(e) {
     }
     return jsonResponse({ success: true, version: SCRIPT_VERSION, action: action, result: result });
   } catch (err) {
-    return jsonResponse({ success: false, version: SCRIPT_VERSION, error: err.toString(), stack: err.stack });
+    return jsonResponse({ success: false, version: SCRIPT_VERSION, error: err.toString() });
   } finally {
     lock.releaseLock();
   }
@@ -141,9 +210,7 @@ function doGet(e) {
   return jsonResponse({
     status: 'ok',
     version: SCRIPT_VERSION,
-    message: '2bad-debtbackup Google Apps Script Web App 正常運作中',
-    spreadsheetName: SpreadsheetApp.getActiveSpreadsheet().getName(),
-    sheets: SpreadsheetApp.getActiveSpreadsheet().getSheets().map(function (s) { return s.getName(); })
+    message: '2bad-debtbackup Google Apps Script Web App 正常運作中'
   });
 }
 

@@ -27,6 +27,7 @@ if (isFirebaseConfigured) {
     googleProvider = new GoogleAuthProvider();
     googleProvider.setCustomParameters({
       prompt: 'select_account',
+      hd: 'boxful.com.tw', // 登入畫面只列出公司帳號
     });
   } catch (e) {
     console.error('Firebase 初始化失敗:', e);

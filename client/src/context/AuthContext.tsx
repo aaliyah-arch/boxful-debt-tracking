@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithPopup, signOut, GoogleAuthProvider } from 'firebase/auth';
 import type { User, Role } from '../types';
 import { authApi } from '../api';
 import { auth, googleProvider, isFirebaseConfigured } from '../config/firebase';
@@ -103,6 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    if (auth) signOut(auth).catch(() => {});
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_user');
     setUser(null);

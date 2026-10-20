@@ -9,6 +9,7 @@ import {
   TOTAL_BUCKET_KEY,
 } from '../utils/dateUtils';
 import { format } from 'date-fns';
+import { auth } from '../config/firebase';
 
 const WHITELIST_STORAGE_KEY = 'boxful_whitelist_data';
 const CASES_STORAGE_KEY = 'boxful_cases_data';
@@ -62,11 +63,30 @@ export interface SheetSyncStatus {
   message: string;
 }
 
+/** 取得目前登入者的 Google 登入憑證（Firebase 會自動更新，過期也不用重新登入） */
+async function getLoginToken(): Promise<string> {
+  if (!auth) throw new Error('登入元件尚未設定');
+  await auth.authStateReady();
+  const u = auth.currentUser;
+  if (!u) {
+    forceRelogin();
+    throw new Error('登入已失效，請重新用公司 Google 帳號登入');
+  }
+  return u.getIdToken();
+}
+
+function forceRelogin() {
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('auth_user');
+  window.location.reload();
+}
+
 /**
  * 呼叫 Apps Script 並等待回應；任何失敗都會丟出可讀的錯誤訊息
  */
 async function postToGas(action: string, payload: Record<string, any>): Promise<any> {
   if (!DEFAULT_DEBT_BACKUP_GAS_URL) throw new Error('尚未設定 Google 試算表 Apps Script 網址');
+  const idToken = await getLoginToken();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
   let res: Response;
@@ -74,7 +94,7 @@ async function postToGas(action: string, payload: Record<string, any>): Promise<
     res = await fetch(DEFAULT_DEBT_BACKUP_GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, ...payload }),
+      body: JSON.stringify({ action, ...payload, idToken }),
       signal: controller.signal,
     });
   } catch (e: any) {
@@ -92,6 +112,10 @@ async function postToGas(action: string, payload: Record<string, any>): Promise<
     json = JSON.parse(text);
   } catch {
     throw new Error('Apps Script 回應格式錯誤（可能需要重新授權或重新部署）');
+  }
+  if (json.code === 'UNAUTHORIZED') {
+    forceRelogin();
+    throw new Error(json.error || '登入已失效，請重新登入');
   }
   if (!json.success) throw new Error(`Apps Script 錯誤：${json.error || '未知錯誤'}`);
   return json.result;
