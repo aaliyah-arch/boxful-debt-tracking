@@ -30,7 +30,7 @@ var SHEET_NAMES = {
   PEPPER_TRACKING: 'Pepper扣款失敗通知追蹤'
 };
 
-var SCRIPT_VERSION = '2026-10-20-gas-web';
+var SCRIPT_VERSION = '2026-10-22-pending-fix';
 var UPLOAD_FOLDER_NAME = '2bad-debtbackup 附件';
 
 // ==============================================================================
@@ -137,7 +137,7 @@ var FIELD_SPECS = [
   { key: 'amount',         names: ['Total Outstanding Amount', '欠款金額'] },
   { key: 'phone',          names: ['Phone', '電話', '手機'], text: true },
   { key: 'stage',          names: ['催帳階段/狀態', '催帳階段', '催帳狀態'] },
-  { key: 'statusTag',      names: ['追蹤標籤'] },
+  { key: 'statusTag',      names: ['追蹤標籤'], append: true },
   { key: 'isClosed',       names: ['結案狀態'] },
 
   // ---- 2C 催帳 ----
@@ -507,8 +507,9 @@ function handleSyncSummaryTracking(ss, businessUnit, items, markMissingAsPending
   var col = cols.col;
   if (col.uid === -1) throw new Error('工作表「' + sheetName + '」找不到 UID 欄位，請確認第一列表頭有「UID」');
 
-  // 補齊會用到的欄位（案件ID、帳單日、開始催帳日）
-  ['caseId', 'billDate', 'collectionStartDate'].forEach(function (k) { ensureColumn(sheet, cols, k); });
+  // 補齊會用到的欄位（案件ID、追蹤標籤、帳單日、開始催帳日）
+  // 追蹤標籤欄不存在時，「不在報表中 → 待確認是否結案」會無法標記，所以一定要補上
+  ['caseId', 'statusTag', 'billDate', 'collectionStartDate'].forEach(function (k) { ensureColumn(sheet, cols, k); });
   var width = cols.width;
   var lastRow = sheet.getLastRow();
   var values = [], formulas = [];
