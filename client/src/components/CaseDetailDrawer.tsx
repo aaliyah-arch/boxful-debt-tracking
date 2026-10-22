@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ExternalLink, CheckCircle2, AlertTriangle, Loader2, XCircle } from 'lucide-react';
+import { X, ExternalLink, CheckCircle2, AlertTriangle, Loader2, XCircle, BellRing } from 'lucide-react';
+import { getTerminationReminder, reminderLabel } from '../utils/terminationReminder';
 import { format } from 'date-fns';
 import type { CaseRecord, DemandMethod } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -483,6 +484,32 @@ export const CaseDetailDrawer: React.FC<CaseDetailDrawerProps> = ({
               {/* 催告與終止 */}
               <form onSubmit={handleSaveFA} className="px-6 sm:px-8 py-7">
                 {sectionHead('催告與終止', '滿 50 天發催告，滿 80 天發終止函；終止函寄出 15 天仍未結清即進入待 write-off。', isFATeam || is2CTeam)}
+
+                {(() => {
+                  const r = getTerminationReminder({
+                    isClosed: caseData.isClosed,
+                    demandNoticeDate: demandNoticeDate || null,
+                    demandDueDate: demandDueDate || null,
+                    terminationNoticeDate: terminationNoticeDate || null,
+                  });
+                  if (!r) return null;
+                  return (
+                    <div
+                      role="status"
+                      className={`mb-6 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${
+                        r.status === 'DUE' ? 'border-red-300 bg-red-50 text-red-900' : 'border-orange-200 bg-orange-50 text-orange-900'
+                      }`}
+                    >
+                      <BellRing className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <div className="font-semibold">{reminderLabel(r)}</div>
+                        <div className="text-xs opacity-80">
+                          可發日 {r.dueDate}{demandDueDate ? '（依催告到期日）' : '（催告日期 +30 天）'}。寄出後請填「終止函寄出日期」，提醒就會消失。
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="space-y-7">
                   <div>

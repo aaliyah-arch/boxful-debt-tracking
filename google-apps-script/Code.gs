@@ -758,6 +758,113 @@ function handleListCases(ss, businessUnits) {
 }
 
 // ==============================================================================
+// 6. 終止函到期 Email 提醒（每天早上寄給腳本擁有者）
+// ==============================================================================
+var REMINDER_DEMAND_TO_TERMINATION_DAYS = 30; // 「催告到期日」沒填時：催告日期 + 30 天
+var REMINDER_DUE_SOON_DAYS = 5;               // 幾天內到期也一併列出
+var REMINDER_HOUR = 9;                        // 每天幾點寄（台北時間）
+// 收件人：留空代表寄給執行此腳本的帳號（也就是設定排程的人）
+var REMINDER_EMAIL = '';
+
+function parseYmd_(v) {
+  var m = String(v || '').trim().match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+}
+
+function taipeiToday_() {
+  return parseYmd_(Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd'));
+}
+
+/** 與前端相同的規則：已催告、未發終止函、未結案；可發日 = 催告到期日，沒填則催告日期 + 30 天 */
+function collectTerminationReminders_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var cases = handleListCases(ss, ['VALET', 'PEPPER']).cases;
+  var today = taipeiToday_();
+  var out = [];
+  cases.forEach(function (c) {
+    if (c.isClosed) return;
+    if (String(c.terminationNoticeDate || '').trim()) return;
+    var due = parseYmd_(c.demandDueDate);
+    if (!due) {
+      var notice = parseYmd_(c.demandNoticeDate);
+      if (!notice) return;
+      due = new Date(notice.getFullYear(), notice.getMonth(), notice.getDate() + REMINDER_DEMAND_TO_TERMINATION_DAYS);
+    }
+    var daysLeft = Math.round((due.getTime() - today.getTime()) / 86400000);
+    if (daysLeft > REMINDER_DUE_SOON_DAYS) return;
+    out.push({
+      bu: c.businessUnit === 'VALET' ? 'Valet' : 'Pepper',
+      uid: c.uid, name: c.name || '', caseId: c.caseId || '',
+      demandNoticeDate: c.demandNoticeDate || '',
+      dueDate: Utilities.formatDate(due, 'Asia/Taipei', 'yyyy-MM-dd'),
+      daysLeft: daysLeft
+    });
+  });
+  out.sort(function (a, b) { return a.daysLeft - b.daysLeft; });
+  return out;
+}
+
+/** 排程每天執行：有需要發終止函的案件才寄信 */
+function sendTerminationReminderEmail() {
+  var list = collectTerminationReminders_();
+  if (!list.length) return 'no-reminders';
+
+  var due = list.filter(function (x) { return x.daysLeft <= 0; });
+  var soon = list.filter(function (x) { return x.daysLeft > 0; });
+  var esc = function (v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;'); };
+  var table = function (rows, color) {
+    return '<table style="border-collapse:collapse;font-size:14px">' +
+      '<tr style="background:#f3f4f6"><th style="padding:6px 10px;text-align:left">事業體</th>' +
+      '<th style="padding:6px 10px;text-align:left">UID</th><th style="padding:6px 10px;text-align:left">客戶</th>' +
+      '<th style="padding:6px 10px;text-align:left">催告日期</th><th style="padding:6px 10px;text-align:left">可發日</th>' +
+      '<th style="padding:6px 10px;text-align:left">狀態</th></tr>' +
+      rows.map(function (x) {
+        var st = x.daysLeft < 0 ? '已過 ' + (-x.daysLeft) + ' 天' : (x.daysLeft === 0 ? '今天' : x.daysLeft + ' 天後');
+        return '<tr><td style="padding:6px 10px">' + esc(x.bu) + '</td><td style="padding:6px 10px">' + esc(x.uid) +
+          '</td><td style="padding:6px 10px">' + esc(x.name) + '</td><td style="padding:6px 10px">' + esc(x.demandNoticeDate) +
+          '</td><td style="padding:6px 10px">' + esc(x.dueDate) + '</td><td style="padding:6px 10px;color:' + color +
+          ';font-weight:bold">' + st + '</td></tr>';
+      }).join('') + '</table>';
+  };
+
+  var html = '<div style="font-family:sans-serif">';
+  if (due.length) html += '<h3 style="color:#b91c1c">🔴 可發終止函：' + due.length + ' 件</h3>' + table(due, '#b91c1c');
+  if (soon.length) html += '<h3 style="color:#c2410c">🟠 ' + REMINDER_DUE_SOON_DAYS + ' 天內到期：' + soon.length + ' 件</h3>' + table(soon, '#c2410c');
+  html += '<p style="color:#6b7280;font-size:12px">可發日 = 催告到期日；未填則為催告日期 + ' + REMINDER_DEMAND_TO_TERMINATION_DAYS +
+    ' 天。在系統填上「終止函寄出日期」後，該案件就不會再出現在提醒中。</p>';
+  try {
+    var url = ScriptApp.getService().getUrl();
+    if (url) html += '<p><a href="' + url + '">開啟呆帳催款追蹤系統</a></p>';
+  } catch (e) { /* 尚未部署時略過 */ }
+  html += '</div>';
+
+  var to = REMINDER_EMAIL || Session.getEffectiveUser().getEmail();
+  var subject = '【終止函提醒】' + (due.length ? due.length + ' 件可發' : '') +
+    (due.length && soon.length ? '、' : '') + (soon.length ? soon.length + ' 件即將到期' : '');
+  MailApp.sendEmail({ to: to, subject: subject, htmlBody: html, name: '呆帳催款追蹤系統' });
+  return 'sent to ' + to + ': ' + list.length;
+}
+
+/** 在編輯器執行一次：建立每天早上的排程（重複執行不會重複建立） */
+function installTerminationReminder() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'sendTerminationReminderEmail') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sendTerminationReminderEmail')
+    .timeBased().everyDays(1).atHour(REMINDER_HOUR).inTimezone('Asia/Taipei').create();
+  Logger.log('已設定每天 ' + REMINDER_HOUR + ' 點寄送終止函提醒給 ' + (REMINDER_EMAIL || Session.getEffectiveUser().getEmail()));
+  Logger.log('目前符合條件的案件：' + collectTerminationReminders_().length + ' 件');
+}
+
+/** 想停止 Email 提醒時執行 */
+function uninstallTerminationReminder() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'sendTerminationReminderEmail') ScriptApp.deleteTrigger(t);
+  });
+  Logger.log('已停止終止函 Email 提醒');
+}
+
+// ==============================================================================
 // 5. 檔案上傳（電子催告檔）
 // ==============================================================================
 

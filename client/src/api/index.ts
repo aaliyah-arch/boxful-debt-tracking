@@ -1,6 +1,7 @@
 import api from './client';
 import type { BusinessUnit, DashboardOverview, CaseRecord, WhitelistItem, User, Role } from '../types';
 import { standaloneStore, loadCasesFromSheet, matchesMonthBucket } from './standaloneStore';
+import { getTerminationReminder } from '../utils/terminationReminder';
 
 export const authApi = {
   loginWithGoogle: async (payload: string | { credential?: string; email?: string; name?: string; avatarUrl?: string }) => {
@@ -66,10 +67,31 @@ export interface CaseListQuery {
   maxDays?: number;
   contactStatus?: string;
   statusTag?: string;
+  /** 'ANY'：只看可發或即將可發終止函的案件 */
+  terminationReminder?: 'ANY';
   page?: number;
   pageSize?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+}
+
+export interface TerminationReminderSummary {
+  businessUnit: BusinessUnit;
+  dueCount: number;
+  soonCount: number;
+}
+
+/** 兩個事業體各有幾件可發 / 即將可發終止函（儀表板提醒用） */
+export async function getTerminationReminderSummary(): Promise<TerminationReminderSummary[]> {
+  const all = await loadCasesFromSheet();
+  return (['VALET', 'PEPPER'] as BusinessUnit[]).map((bu) => {
+    const rs = all
+      .filter((c) => c.businessUnit === bu)
+      .map((c) => getTerminationReminder(c))
+      .filter(Boolean);
+    const dueCount = rs.filter((r) => r!.status === 'DUE').length;
+    return { businessUnit: bu, dueCount, soonCount: rs.length - dueCount };
+  });
 }
 
 export const casesApi = {
@@ -85,6 +107,8 @@ export const casesApi = {
         };
         totalAmountSum: number;
         pendingConfirmationCount?: number;
+        terminationDueCount?: number;
+        terminationSoonCount?: number;
       }>('/cases', { params });
       return res.data;
     } catch {
@@ -94,6 +118,7 @@ export const casesApi = {
       if (params.stage) items = items.filter((c) => c.stage === params.stage);
       if (params.monthBucket) items = items.filter((c) => matchesMonthBucket(c, params.monthBucket!));
       if (params.statusTag) items = items.filter((c) => c.statusTag === params.statusTag);
+      if (params.terminationReminder) items = items.filter((c) => !!getTerminationReminder(c));
       if (params.minDays !== undefined) items = items.filter((c) => c.outstandingDays >= params.minDays!);
       if (params.maxDays !== undefined) items = items.filter((c) => c.outstandingDays <= params.maxDays!);
       if (params.contactStatus) {
@@ -124,6 +149,10 @@ export const casesApi = {
       });
 
       const totalAmountSum = items.reduce((sum, c) => sum + c.outstandingAmount, 0);
+      const unitCases = allCases.filter((c) => !params.businessUnit || c.businessUnit === params.businessUnit);
+      const reminders = unitCases.map((c) => getTerminationReminder(c)).filter(Boolean);
+      const terminationDueCount = reminders.filter((r) => r!.status === 'DUE').length;
+      const terminationSoonCount = reminders.length - terminationDueCount;
       const pendingConfirmationCount = allCases.filter(
         (c) => (!params.businessUnit || c.businessUnit === params.businessUnit) && !c.isClosed && c.statusTag === 'PENDING_CONFIRMATION'
       ).length;
@@ -139,6 +168,8 @@ export const casesApi = {
         pagination: { page, pageSize, totalCount, totalPages },
         totalAmountSum,
         pendingConfirmationCount,
+        terminationDueCount,
+        terminationSoonCount,
       };
     }
   },

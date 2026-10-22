@@ -11,6 +11,7 @@ import {
   ChevronsUpDown,
   RefreshCw,
   X,
+  BellRing,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type { BusinessUnit } from '../types';
@@ -20,6 +21,7 @@ import { safeFormat, monthBucketLabel } from '../utils/dateUtils';
 import { StatusBadge } from '../components/StatusBadge';
 import { CaseDetailDrawer } from '../components/CaseDetailDrawer';
 import { AgingBar } from '../components/AgingBar';
+import { getTerminationReminder, reminderLabel } from '../utils/terminationReminder';
 import type { CaseRecord } from '../types';
 
 interface CaseListPageProps {
@@ -27,6 +29,7 @@ interface CaseListPageProps {
   onSelectBusinessUnit: (unit: BusinessUnit) => void;
   initialStage?: string;
   initialMonthBucket?: string;
+  initialTerminationReminder?: boolean;
   onOpenUpload: () => void;
 }
 
@@ -34,10 +37,12 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
   businessUnit,
   initialStage = '',
   initialMonthBucket = '',
+  initialTerminationReminder = false,
 }) => {
   const [stageFilter, setStageFilter] = useState<string>(initialStage);
   const [monthBucket, setMonthBucket] = useState<string>(initialMonthBucket);
   const [statusTagFilter, setStatusTagFilter] = useState<string>('');
+  const [terminationFilter, setTerminationFilter] = useState<boolean>(initialTerminationReminder);
   const [search, setSearch] = useState('');
   const [contactStatus, setContactStatus] = useState('');
   const [minDays, setMinDays] = useState<number | undefined>(undefined);
@@ -64,6 +69,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
       stageFilter,
       monthBucket,
       statusTagFilter,
+      terminationFilter,
       search,
       contactStatus,
       minDays,
@@ -78,6 +84,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
         stage: stageFilter || undefined,
         monthBucket: monthBucket || undefined,
         statusTag: statusTagFilter || undefined,
+        terminationReminder: terminationFilter ? 'ANY' : undefined,
         search: search || undefined,
         contactStatus: contactStatus || undefined,
         minDays: minDays,
@@ -138,6 +145,8 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
   const hasFilters = !!(stageFilter || monthBucket || search || contactStatus || minDays !== undefined);
   const pendingCount = data?.pendingConfirmationCount ?? 0;
   const pendingActive = statusTagFilter === 'PENDING_CONFIRMATION';
+  const termDue = data?.terminationDueCount ?? 0;
+  const termSoon = data?.terminationSoonCount ?? 0;
 
   const md = (d?: string | null) => safeFormat(d, 'MM/dd');
 
@@ -185,6 +194,47 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
         </div>
       </header>
 
+      {/* 終止函提醒 */}
+      {(termDue + termSoon > 0 || terminationFilter) && (
+        <div
+          role="status"
+          className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
+            termDue > 0 ? 'border-red-300 bg-red-50' : 'border-orange-200 bg-orange-50'
+          }`}
+        >
+          <p className={`flex items-center gap-2 text-sm ${termDue > 0 ? 'text-red-900' : 'text-orange-900'}`}>
+            <BellRing className="w-4 h-4 flex-shrink-0" />
+            <span>
+              {termDue > 0 && (
+                <strong className="font-semibold tabular-nums">{termDue} 件可發終止函</strong>
+              )}
+              {termDue > 0 && termSoon > 0 && '，'}
+              {termSoon > 0 && <span className="tabular-nums">{termSoon} 件 5 天內到期</span>}
+              {termDue + termSoon === 0 && '目前沒有需要發終止函的案件'}
+              <span className="text-xs opacity-75">（催告到期日，或催告日期 +30 天）</span>
+            </span>
+          </p>
+          <button
+            onClick={() => {
+              setTerminationFilter(!terminationFilter);
+              if (!terminationFilter) {
+                setStatusTagFilter('');
+                setStageFilter('');
+                setMonthBucket('');
+              }
+              setPage(1);
+            }}
+            className={`btn !py-1.5 ${
+              terminationFilter
+                ? 'bg-red-800 text-white hover:bg-red-900'
+                : 'bg-white text-red-900 border border-red-300 hover:bg-red-100'
+            }`}
+          >
+            {terminationFilter ? '顯示全部案件' : '只看這些案件'}
+          </button>
+        </div>
+      )}
+
       {/* 待確認結案提醒 */}
       {(pendingCount > 0 || pendingActive) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
@@ -198,6 +248,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                 setStatusTagFilter('');
               } else {
                 setStatusTagFilter('PENDING_CONFIRMATION');
+                setTerminationFilter(false);
                 setStageFilter('');
               }
               setPage(1);
@@ -344,6 +395,7 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
               ) : (
                 data?.items.map((item) => {
                   const pending = item.statusTag === 'PENDING_CONFIRMATION' && !item.isClosed;
+                  const reminder = getTerminationReminder(item);
                   return (
                     <tr
                       key={item.id}
@@ -364,6 +416,17 @@ export const CaseListPage: React.FC<CaseListPageProps> = ({
                           </button>
                           {pending && (
                             <span className="text-2xs font-semibold text-amber-800 bg-amber-100 rounded px-1.5">待確認</span>
+                          )}
+                          {reminder && (
+                            <span
+                              title={`可發日 ${reminder.dueDate}`}
+                              className={`inline-flex items-center gap-1 text-2xs font-semibold rounded px-1.5 whitespace-nowrap ${
+                                reminder.status === 'DUE' ? 'bg-red-600 text-white' : 'bg-orange-100 text-orange-800'
+                              }`}
+                            >
+                              <BellRing className="w-3 h-3" />
+                              {reminderLabel(reminder)}
+                            </span>
                           )}
                         </div>
                         <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-ink-500 tabular-nums">

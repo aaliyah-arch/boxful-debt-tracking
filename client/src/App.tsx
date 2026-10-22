@@ -24,7 +24,7 @@ const MainLayout: React.FC = () => {
   const [businessUnit, setBusinessUnit] = useState<BusinessUnit>('VALET');
   const [activeTab, setActiveTab] = useState<'dashboard' | 'cases'>('dashboard');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [caseFilterPreset, setCaseFilterPreset] = useState<{ stage?: string; monthBucket?: string }>({});
+  const [caseFilterPreset, setCaseFilterPreset] = useState<{ stage?: string; monthBucket?: string; terminationReminder?: boolean }>({});
 
   React.useEffect(() => {
     // 1. Silent sync immediately on app launch
@@ -83,7 +83,7 @@ const MainLayout: React.FC = () => {
     return <LoginPage />;
   }
 
-  const handleNavigateToCasesFromDashboard = (filters?: { stage?: string; monthBucket?: string }) => {
+  const handleNavigateToCasesFromDashboard = (filters?: { stage?: string; monthBucket?: string; terminationReminder?: boolean }) => {
     if (filters) {
       setCaseFilterPreset(filters);
     } else {
@@ -120,6 +120,7 @@ const MainLayout: React.FC = () => {
             onSelectBusinessUnit={(unit) => setBusinessUnit(unit)}
             initialStage={caseFilterPreset.stage}
             initialMonthBucket={caseFilterPreset.monthBucket}
+            initialTerminationReminder={caseFilterPreset.terminationReminder}
             onOpenUpload={() => setIsUploadOpen(true)}
           />
         )}

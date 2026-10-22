@@ -1,15 +1,15 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw, Upload } from 'lucide-react';
+import { RefreshCw, Upload, BellRing, ChevronRight } from 'lucide-react';
 import type { BusinessUnit } from '../types';
-import { dashboardApi } from '../api';
+import { dashboardApi, getTerminationReminderSummary } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { STAGES, stageMeta } from '../components/stage';
 
 interface DashboardPageProps {
   businessUnit: BusinessUnit;
   onSelectBusinessUnit: (unit: BusinessUnit) => void;
-  onNavigateToCases: (filters?: { stage?: string; monthBucket?: string }) => void;
+  onNavigateToCases: (filters?: { stage?: string; monthBucket?: string; terminationReminder?: boolean }) => void;
   onOpenUpload: () => void;
 }
 
@@ -20,6 +20,7 @@ const LADDER = STAGES.filter((s) => s.code !== 'CLOSED');
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   businessUnit,
+  onSelectBusinessUnit,
   onNavigateToCases,
   onOpenUpload,
 }) => {
@@ -28,6 +29,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     queryKey: ['dashboard-overview', businessUnit],
     queryFn: () => dashboardApi.getOverview(businessUnit),
   });
+
+  const { data: reminders } = useQuery({
+    queryKey: ['dashboard-overview', 'termination-reminders'],
+    queryFn: getTerminationReminderSummary,
+  });
+  const reminderRows = (reminders ?? []).filter((r) => r.dueCount + r.soonCount > 0);
+  const anyDue = reminderRows.some((r) => r.dueCount > 0);
 
   const unitName = businessUnit === 'VALET' ? 'Valet' : 'Pepper';
   const kpi = data?.kpiSummary;
@@ -59,6 +67,45 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           )}
         </div>
       </header>
+
+      {/* 終止函提醒：兩個事業體都列出，避免漏看另一邊 */}
+      {reminderRows.length > 0 && (
+        <section
+          aria-label="終止函提醒"
+          className={`rounded-2xl border-2 px-5 py-4 ${anyDue ? 'border-red-400 bg-red-50' : 'border-orange-300 bg-orange-50'}`}
+        >
+          <div className={`flex items-center gap-2 font-bold ${anyDue ? 'text-red-900' : 'text-orange-900'}`}>
+            <BellRing className={`w-5 h-5 ${anyDue ? 'animate-pulse' : ''}`} />
+            終止函提醒
+            <span className="text-xs font-normal opacity-75">催告到期日（未填則為催告日期 +30 天）已到或 5 天內到期</span>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {reminderRows.map((r) => (
+              <button
+                key={r.businessUnit}
+                onClick={() => {
+                  onSelectBusinessUnit(r.businessUnit);
+                  onNavigateToCases({ terminationReminder: true });
+                }}
+                className="flex items-center gap-3 rounded-xl bg-white border border-ink-200 px-4 py-2.5 text-left hover:border-red-400 hover:shadow-sm transition"
+              >
+                <span className="font-semibold text-ink-900">{r.businessUnit === 'VALET' ? 'Valet' : 'Pepper'}</span>
+                {r.dueCount > 0 && (
+                  <span className="rounded-md bg-red-600 text-white text-sm font-bold px-2 py-0.5 tabular-nums">
+                    {r.dueCount} 件可發
+                  </span>
+                )}
+                {r.soonCount > 0 && (
+                  <span className="rounded-md bg-orange-100 text-orange-800 text-sm font-semibold px-2 py-0.5 tabular-nums">
+                    {r.soonCount} 件即將到期
+                  </span>
+                )}
+                <ChevronRight className="w-4 h-4 text-ink-400" />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* 總額 + 升級階梯 */}
       <section className="panel overflow-hidden" aria-label="各階段欠款">
